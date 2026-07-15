@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod config;
+pub mod dev_logger;
 pub mod error;
 pub mod markdown;
 pub mod mmap;
@@ -35,6 +36,12 @@ pub fn run() {
             // === 启动提醒调度器（后台线程，30s 轮询）===
             reminder_scheduler::spawn(app.handle().clone());
 
+            // === 初始化开发模式日志（Phase 12）===
+            // 即使失败也不阻塞启动
+            if let Err(e) = dev_logger::init() {
+                eprintln!("[mindmap] dev_logger init failed: {}", e);
+            }
+
             Ok(())
         })
         .on_window_event(handle_window_event)
@@ -65,6 +72,8 @@ pub fn run() {
             commands::upsert_reminder,
             commands::delete_reminder,
             commands::get_reminders_for_node,
+            commands::log_event,
+            commands::is_dev_logger_ready,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

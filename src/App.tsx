@@ -11,8 +11,17 @@ import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
 import { useWindowState } from "./hooks/useWindowState";
+import {
+  initDevLogger,
+  logUserAction,
+  logError,
+  logState,
+} from "./utils/devLogger";
 import type { Config, Content, Priority } from "./types";
 import "./App.css";
+
+// 模块加载时初始化 dev 日志
+initDevLogger();
 
 function App() {
   const [booted, setBooted] = useState(false);
@@ -35,13 +44,18 @@ function App() {
       if (key === "z" && !e.shiftKey) {
         e.preventDefault();
         const info = getHistoryInfo();
-        if (info.canUndo) undo();
+        if (info.canUndo) {
+          logUserAction("keyboard.undo", { canUndo: info.undoCount });
+          undo();
+        }
       } else if (key === "z" && e.shiftKey) {
         e.preventDefault();
         const info = getHistoryInfo();
-        if (info.canRedo) redo();
+        if (info.canRedo) {
+          logUserAction("keyboard.redo", { canRedo: info.redoCount });
+          redo();
+        }
       } else if (key === "y" && !e.shiftKey) {
-        // Cmd+Y 也作为重做（部分用户习惯）
         e.preventDefault();
         const info = getHistoryInfo();
         if (info.canRedo) redo();
@@ -56,6 +70,7 @@ function App() {
       try {
         const cfg = await invoke<Config>("get_config");
         setConfig(cfg);
+        logState("config.loaded", { hasLastOpened: !!cfg.last_opened_file });
         // 尝试恢复 last_opened_file
         let restored = false;
         if (cfg.last_opened_file) {
@@ -70,23 +85,27 @@ function App() {
               setContent(c);
               setFilePath(cfg.last_opened_file);
               restored = true;
+              logState("file.restored", { path: cfg.last_opened_file });
             } catch (e) {
               console.error("[App] 恢复上次文件失败，回退到新建", e);
+              logError("file.restore.failed", String(e));
             }
           }
         }
-        // 没有可恢复的文件 → 自动新建默认文档（让用户立即看到根节点）
         if (!restored) {
           const c = await invoke<Content>("new_mmap", {
             topic: "中心主题",
           });
           setContent(c);
           setFilePath(null);
+          logState("file.auto_new", null);
         }
       } catch (e) {
         console.error("[App] 启动失败", e);
+        logError("app.boot.failed", String(e));
       } finally {
         setBooted(true);
+        logState("app.booted", null);
       }
     })();
   }, [setContent, setFilePath, setConfig]);

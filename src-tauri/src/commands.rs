@@ -240,3 +240,22 @@ pub fn get_reminders_for_node(node_id: String) -> Result<Vec<Reminder>> {
         .filter(|r| r.node_id == node_id)
         .collect())
 }
+
+// ===== 开发模式日志（Phase 12）=====
+
+#[tauri::command]
+pub fn log_event(entry: crate::dev_logger::LogEntry) -> Result<()> {
+    // 静默失败：日志写不进去不能影响主流程
+    match crate::dev_logger::write(&entry) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("[log_event] write failed: {}", e);
+            Ok(())
+        }
+    }
+}
+
+#[tauri::command]
+pub fn is_dev_logger_ready() -> bool {
+    true
+}

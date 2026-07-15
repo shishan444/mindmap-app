@@ -1,6 +1,7 @@
 import { useMindMapStore } from "../store";
 import type { Priority } from "../types";
 import { PRIORITY_LABELS } from "../types";
+import { logUserAction } from "../utils/devLogger";
 import "./Toolbar.css";
 
 interface Props {
@@ -38,15 +39,32 @@ export default function Toolbar({
       </div>
 
       <div className="toolbar-group">
-        <button className="tb-btn" onClick={onNew} title="新建">
+        <button
+          className="tb-btn"
+          onClick={() => {
+            logUserAction("toolbar.click", { target: "new" });
+            onNew();
+          }}
+          title="新建"
+        >
           📝
         </button>
-        <button className="tb-btn" onClick={onOpen} title="打开">
+        <button
+          className="tb-btn"
+          onClick={() => {
+            logUserAction("toolbar.click", { target: "open" });
+            onOpen();
+          }}
+          title="打开"
+        >
           📂
         </button>
         <button
           className="tb-btn"
-          onClick={onSave}
+          onClick={() => {
+            logUserAction("toolbar.click", { target: "save" });
+            onSave();
+          }}
           title="保存"
           disabled={!content}
         >
@@ -66,7 +84,10 @@ export default function Toolbar({
               <button
                 key={p}
                 className="dropdown-item"
-                onClick={() => onSetPriority(p)}
+                onClick={() => {
+                  logUserAction("priority.set", { priority: p });
+                  onSetPriority(p);
+                }}
               >
                 <span className={`priority-dot priority-${p.toLowerCase()}`}></span>
                 {PRIORITY_LABELS[p]}
