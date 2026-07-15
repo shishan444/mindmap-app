@@ -4,6 +4,7 @@ pub mod error;
 pub mod markdown;
 pub mod mmap;
 pub mod models;
+pub mod opml;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -53,6 +54,9 @@ pub fn run() {
             commands::export_markdown,
             commands::import_markdown_file,
             commands::import_markdown_string,
+            commands::export_opml,
+            commands::import_opml_file,
+            commands::import_opml_string,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

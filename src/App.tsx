@@ -244,9 +244,65 @@ function App() {
     }
   };
 
-  // Phase 11.2 占位
-  const handleExportOpml = () => alert("OPML 导出：Phase 11.2 即将实现");
-  const handleImportOpml = () => alert("OPML 导入：Phase 11.2 即将实现");
+  // Phase 11.2 OPML
+  const handleExportOpml = async () => {
+    const state = useMindMapStore.getState();
+    if (!state.content) return;
+    try {
+      const opml = await invoke<string>("export_opml", { content: state.content });
+      const defaultName = `${state.content.root.topic || "思维导图"}.opml`;
+      const defaultPath = state.config?.last_export_dir
+        ? `${state.config.last_export_dir}/${defaultName}`
+        : defaultName;
+      const filePath = await saveDialog({
+        defaultPath,
+        filters: [{ name: "OPML", extensions: ["opml"] }],
+      });
+      if (!filePath) return;
+      const bytes = new TextEncoder().encode(opml);
+      await invoke("save_bytes", {
+        path: filePath,
+        data: Array.from(bytes),
+      });
+      const dir = filePath.split("/").slice(0, -1).join("/");
+      if (dir) {
+        await invoke("update_last_dirs", {
+          openDir: null,
+          exportDir: dir,
+          importDir: null,
+        });
+      }
+    } catch (e) {
+      console.error("[App] OPML 导出失败", e);
+      alert("OPML 导出失败: " + e);
+    }
+  };
+
+  const handleImportOpml = async () => {
+    const state = useMindMapStore.getState();
+    try {
+      const selected = await openDialog({
+        defaultPath: state.config?.last_import_dir ?? undefined,
+        filters: [{ name: "OPML", extensions: ["opml"] }],
+        multiple: false,
+      });
+      if (typeof selected !== "string" || !selected) return;
+      const c = await invoke<Content>("import_opml_file", { path: selected });
+      setContent(c);
+      setFilePath(null);
+      const dir = selected.split("/").slice(0, -1).join("/");
+      if (dir) {
+        await invoke("update_last_dirs", {
+          openDir: null,
+          exportDir: null,
+          importDir: dir,
+        });
+      }
+    } catch (e) {
+      console.error("[App] OPML 导入失败", e);
+      alert("OPML 导入失败: " + e);
+    }
+  };
 
   if (!booted) {
     return <div className="app-booting">加载中...</div>;

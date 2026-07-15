@@ -189,3 +189,21 @@ pub fn import_markdown_file(path: String) -> Result<Content> {
 pub fn import_markdown_string(md: String) -> Result<Content> {
     crate::markdown::import_markdown(&md)
 }
+
+// ===== OPML 导入导出 =====
+
+#[tauri::command]
+pub fn export_opml(content: Content) -> Result<String> {
+    Ok(crate::opml::export_opml(&content))
+}
+
+#[tauri::command]
+pub fn import_opml_file(path: String) -> Result<Content> {
+    let s = std::fs::read_to_string(&path)?;
+    crate::opml::import_opml(&s)
+}
+
+#[tauri::command]
+pub fn import_opml_string(opml: String) -> Result<Content> {
+    crate::opml::import_opml(&opml)
+}
