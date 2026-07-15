@@ -8,6 +8,7 @@ import StatusBar from "./components/StatusBar";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
+import { useWindowState } from "./hooks/useWindowState";
 import type { Config, Content, Priority } from "./types";
 import "./App.css";
 
@@ -20,6 +21,8 @@ function App() {
 
   // 启用自动保存（防抖 2 秒）
   useAutoSave();
+  // 启用窗口状态恢复/保存
+  useWindowState();
 
   // 全局快捷键：Cmd+Z 撤销 / Cmd+Shift+Z 重做
   useEffect(() => {
