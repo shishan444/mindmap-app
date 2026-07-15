@@ -105,8 +105,8 @@ Phase 8（托盘 + 集成测试 + 打包）
 - [x] 端到端：新建 → 编辑 → 保存 → 重启恢复（通过 Rust 集成测试覆盖）
 - [x] 验证 .mmap 结构（zip_structure 测试）
 - [x] 验证配置文件正确（config_save_load_roundtrip 测试）
-- [ ] cargo tauri build 打包 .app（待运行）
-- **Status:** 核心完成，打包待用户决定
+- [x] cargo tauri build 打包成功（13MB .app + 4MB .dmg）
+- **Status:** complete
 
 ### Phase 9: 测试框架（自动化回归基础设施）
 - [x] 9.1 需求→测试映射文档（`tests/specs/requirements.md`，70 用例：23 决策 + 23 后端 + 19 前端 + 5 E2E）
