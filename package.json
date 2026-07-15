@@ -1,0 +1,55 @@
+{
+  "name": "mindmap-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:fe": "vitest run",
+    "test:be": "export PATH=\"$HOME/.cargo/bin:$PATH\" && cd src-tauri && cargo test",
+    "test:integration": "export PATH=\"$HOME/.cargo/bin:$PATH\" && cd src-tauri && cargo test --test '*'",
+    "test:all": "npm run test:fe && npm run test:be && npm run build",
+    "test:regression": "npm run test:all",
+    "test:watch:all": "concurrently -n fe,be -c blue,green \"vitest\" \"cd src-tauri && (cargo watch -x test -w src 2>/dev/null || echo '[skip] cargo-watch 未安装：cargo install cargo-watch')\"",
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config --local core.hooksPath .githooks && chmod +x .githooks/* || true"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2",
+    "html-to-image": "^1.11.13",
+    "mind-elixir": "^5.14.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "uuid": "^14.0.1",
+    "zundo": "^2.3.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "concurrently": "^10.0.3",
+    "jsdom": "^29.1.1",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
+  }
+}

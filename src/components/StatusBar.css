@@ -1,0 +1,35 @@
+.status-bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: #ececec;
+  border-top: 1px solid #d1d1d1;
+  font-size: 11px;
+  color: #666;
+  user-select: none;
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-divider {
+  color: #c0c0c0;
+}
+
+.status-save {
+  color: #555;
+}
+
+.status-file-path {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}

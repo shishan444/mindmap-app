@@ -1,0 +1,67 @@
+/* 全局重置 + 主布局 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family:
+    -apple-system,
+    "PingFang SC",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  font-size: 14px;
+  color: #1f1f1f;
+  background: #f7f7f5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0; /* 关键：让 flex 子项可以正确 overflow */
+}
+
+.app-booting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: #888;
+  font-size: 14px;
+}
+
+/* mind-elixir 内部样式覆盖 */
+.mind-elixir-wrap .map-area,
+.mind-elixir-wrap .nodes {
+  background: transparent;
+}
+
+.mind-elixir-wrap topic {
+  font-family: inherit;
+}

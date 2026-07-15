@@ -1,0 +1,32 @@
+#!/bin/sh
+# Git pre-commit hook：提交前自动跑全量回归测试
+#
+# 安装：npm install 会自动执行 `prepare` 脚本，把 .githooks/ 设为 hooksPath
+# 手动启用：git config --local core.hooksPath .githooks
+# 临时跳过：git commit --no-verify（不推荐常规使用）
+
+set -e
+
+# 切换到仓库根目录（git hook 的 cwd 是工作树顶层，但保险起见）
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+# 没 package.json 不是这个项目，跳过
+[ -f package.json ] || exit 0
+
+echo "[pre-commit] 跑全量回归测试..."
+echo "[pre-commit]   前端单元 + Rust 单元/集成 + 类型 + 构建"
+echo ""
+
+# 跑测试，捕获失败
+if npm run test:all; then
+  echo ""
+  echo "[pre-commit] ✅ 全部测试通过，允许提交。"
+  exit 0
+else
+  echo ""
+  echo "[pre-commit] ❌ 测试失败，提交被阻止。"
+  echo "[pre-commit]    修复后重新 stage + commit。"
+  echo "[pre-commit]    紧急情况跳过：git commit --no-verify"
+  exit 1
+fi

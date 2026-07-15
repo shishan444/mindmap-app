@@ -1,0 +1,138 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  background: #ececec;
+  border-bottom: 1px solid #d1d1d1;
+  gap: 8px;
+  user-select: none;
+  /* 注意：不使用 -webkit-app-region: drag —— Tauri 2 macOS 下会让按钮 onClick 失效。
+     窗口拖动改由 macOS 标题栏（隐藏式）或其他方式实现。 */
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-group.brand {
+  margin-right: 8px;
+}
+
+.brand-icon {
+  font-size: 20px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: #c7c7c7;
+  margin: 0 4px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.tb-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: #d8d8d8;
+}
+
+.tb-btn:active:not(:disabled) {
+  background: #c8c8c8;
+}
+
+.tb-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tb-shortcut-hint {
+  font-size: 11px;
+  color: #888;
+}
+
+.priority-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #d1d1d1;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-width: 140px;
+  z-index: 100;
+  padding: 4px;
+}
+
+.priority-dropdown:hover .dropdown-menu,
+.priority-dropdown:focus-within .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px;
+  color: #333;
+}
+
+.dropdown-item:hover {
+  background: #f0f0f0;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 4px 0;
+}
+
+.priority-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.priority-p0 {
+  background: #e74c3c;
+}
+.priority-p1 {
+  background: #f39c12;
+}
+.priority-p2 {
+  background: #f1c40f;
+}
+.priority-p3 {
+  background: #95a5a6;
+}

@@ -1,0 +1,123 @@
+// 与 Rust 后端 models.rs 对应的前端类型定义
+
+export type Priority = "P0" | "P1" | "P2" | "P3";
+
+export interface NodeImage {
+  path: string;
+  width: number;
+  height: number;
+}
+
+export interface NodeStyle {
+  font_family?: string;
+  font_size?: number;
+  font_weight?: string;
+  color?: string;
+  background?: string;
+  border_color?: string;
+  border_width?: number;
+  shape?: string;
+  line_style?: string;
+}
+
+export interface MindNode {
+  id: string;
+  topic: string;
+  note?: string;
+  priority?: Priority;
+  image?: NodeImage;
+  icons?: string[];
+  reminder_ids?: string[];
+  style?: NodeStyle;
+  collapsed?: boolean;
+  children: MindNode[];
+}
+
+export interface CanvasState {
+  zoom: number;
+  pan_x: number;
+  pan_y: number;
+  selected_node_id?: string;
+}
+
+export interface Content {
+  version: string;
+  root: MindNode;
+  canvas_state: CanvasState;
+}
+
+export interface WindowState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  is_maximized: boolean;
+  sidebar_width: number;
+  sidebar_collapsed: boolean;
+  active_tab: string;
+}
+
+export interface UiPrefs {
+  theme: string;
+  language: string;
+  font_family?: string;
+  font_size: number;
+  show_minimap: boolean;
+  show_toolbar: boolean;
+}
+
+export interface ReminderPrefs {
+  sound_enabled: boolean;
+  sound_file: string;
+  default_priority: string;
+  snooze_minutes: number;
+  show_modal_when_background: boolean;
+}
+
+export interface ExportPrefs {
+  png_scale: number;
+  markdown_indent: string;
+}
+
+export interface Config {
+  version: string;
+  last_open_dir?: string;
+  last_export_dir?: string;
+  last_import_dir?: string;
+  default_new_file_dir?: string;
+  last_opened_file?: string;
+  window_state: WindowState;
+  ui: UiPrefs;
+  auto_save_interval_sec: number;
+  recent_files_max: number;
+  reminder: ReminderPrefs;
+  export: ExportPrefs;
+}
+
+export interface RecentFile {
+  path: string;
+  name: string;
+  opened_at: string;
+  pinned: boolean;
+}
+
+export interface RecentFiles {
+  version: string;
+  files: RecentFile[];
+}
+
+export type SidebarTab = "properties" | "reminders" | "style" | "outline";
+
+export const PRIORITY_COLORS: Record<Priority, string> = {
+  P0: "#E74C3C",
+  P1: "#F39C12",
+  P2: "#F1C40F",
+  P3: "#95A5A6",
+};
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  P0: "P0 紧急",
+  P1: "P1 高",
+  P2: "P2 中",
+  P3: "P3 低",
+};
