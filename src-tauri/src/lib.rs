@@ -5,6 +5,7 @@ pub mod markdown;
 pub mod mmap;
 pub mod models;
 pub mod opml;
+pub mod reminder_scheduler;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -30,6 +31,9 @@ pub fn run() {
 
             // === 创建托盘 ===
             setup_tray(app)?;
+
+            // === 启动提醒调度器（后台线程，30s 轮询）===
+            reminder_scheduler::spawn(app.handle().clone());
 
             Ok(())
         })

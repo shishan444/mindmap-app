@@ -6,6 +6,7 @@ import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
 import PreferencesModal from "./components/PreferencesModal";
+import ReminderToast from "./components/ReminderToast";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
@@ -333,6 +334,7 @@ function App() {
       </div>
       <StatusBar />
       <PreferencesModal />
+      <ReminderToast />
     </div>
   );
 }

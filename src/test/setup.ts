@@ -25,6 +25,10 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
 // 模拟 matchMedia（jsdom 不自带）
 Object.defineProperty(window, "matchMedia", {
   writable: true,
