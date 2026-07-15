@@ -13,6 +13,7 @@ interface Props {
   onImportMarkdown: () => void;
   onImportOpml: () => void;
   onSetPriority: (p: Priority) => void;
+  onOpenPreferences: () => void;
 }
 
 export default function Toolbar({
@@ -25,6 +26,7 @@ export default function Toolbar({
   onImportMarkdown,
   onImportOpml,
   onSetPriority,
+  onOpenPreferences,
 }: Props) {
   const dirty = useMindMapStore((s) => s.dirty);
   const content = useMindMapStore((s) => s.content);
@@ -119,6 +121,13 @@ export default function Toolbar({
 
       <div className="toolbar-group">
         <span className="tb-shortcut-hint">Tab=子节点 · Enter=兄弟 · F2=编辑</span>
+        <button
+          className="tb-btn"
+          onClick={onOpenPreferences}
+          title="偏好设置"
+        >
+          ⚙
+        </button>
       </div>
     </div>
   );

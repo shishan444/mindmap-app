@@ -1,0 +1,176 @@
+.prefs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.prefs-modal {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prefs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.prefs-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.prefs-close {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  line-height: 1;
+}
+
+.prefs-close:hover {
+  color: #333;
+}
+
+.prefs-tabs {
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 12px;
+}
+
+.prefs-tab {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prefs-tab:hover {
+  background: #f5f5f5;
+}
+
+.prefs-tab.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+}
+
+.prefs-tab-icon {
+  font-size: 14px;
+}
+
+.prefs-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.prefs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.prefs-field.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.prefs-field.checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.prefs-field span {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.prefs-field input[type="text"],
+.prefs-field input[type="number"],
+.prefs-field select {
+  padding: 6px 10px;
+  border: 1px solid #d1d1d1;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.prefs-field input:focus,
+.prefs-field select:focus {
+  border-color: #1a73e8;
+}
+
+.prefs-error {
+  padding: 8px 16px;
+  background: #fff5f5;
+  color: #c00;
+  font-size: 12px;
+  border-top: 1px solid #ffe0e0;
+}
+
+.prefs-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.prefs-btn-cancel,
+.prefs-btn-save {
+  padding: 8px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.prefs-btn-cancel {
+  background: transparent;
+  border-color: #d1d1d1;
+  color: #555;
+}
+
+.prefs-btn-cancel:hover {
+  background: #f5f5f5;
+}
+
+.prefs-btn-save {
+  background: #1a73e8;
+  color: white;
+}
+
+.prefs-btn-save:hover:not(:disabled) {
+  background: #1557b8;
+}
+
+.prefs-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

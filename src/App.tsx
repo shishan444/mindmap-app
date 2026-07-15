@@ -5,6 +5,7 @@ import Toolbar from "./components/Toolbar";
 import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
+import PreferencesModal from "./components/PreferencesModal";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
@@ -320,6 +321,7 @@ function App() {
         onImportMarkdown={handleImportMarkdown}
         onImportOpml={handleImportOpml}
         onSetPriority={handleSetPriority}
+        onOpenPreferences={() => useMindMapStore.getState().openPreferences()}
       />
       <div className="app-main">
         <MindMapCanvas
@@ -330,6 +332,7 @@ function App() {
         <Sidebar />
       </div>
       <StatusBar />
+      <PreferencesModal />
     </div>
   );
 }

@@ -21,6 +21,7 @@ function renderToolbar(handlers: any = {}) {
     onImportMarkdown: handlers.onImportMarkdown || vi.fn(),
     onImportOpml: handlers.onImportOpml || vi.fn(),
     onSetPriority: handlers.onSetPriority || vi.fn(),
+    onOpenPreferences: handlers.onOpenPreferences || vi.fn(),
   };
   return { ...props, result: render(<Toolbar {...props} />) };
 }

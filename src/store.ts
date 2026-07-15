@@ -40,6 +40,12 @@ interface MindMapState {
   updateSelectedNode: (updates: Partial<MindNode>) => void;
   setPriorityForSelected: (p: Priority | null) => void;
   clearHistory: () => void;
+
+  // Phase 11.3: 偏好设置
+  showPreferences: boolean;
+  openPreferences: () => void;
+  closePreferences: () => void;
+  replaceConfig: (cfg: Config) => void;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -124,6 +130,17 @@ export const useMindMapStore = create<MindMapState>()(
       clearHistory: () => {
         useMindMapStore.temporal.getState().clear();
       },
+
+      showPreferences: false,
+      openPreferences: () => set({ showPreferences: true }),
+      closePreferences: () => set({ showPreferences: false }),
+      replaceConfig: (cfg) =>
+        set({
+          config: cfg,
+          activeTab: (cfg.window_state.active_tab as SidebarTab) || "properties",
+          sidebarCollapsed: cfg.window_state.sidebar_collapsed,
+          sidebarWidth: cfg.window_state.sidebar_width,
+        }),
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）
