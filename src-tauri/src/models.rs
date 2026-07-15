@@ -367,6 +367,127 @@ impl Default for Config {
     }
 }
 
+// ===== Reminder（Phase 11.5）=====
+
+/// 重复规则：单次 / 每日固定时间 / 间隔
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RepeatRule {
+    /// "daily" | "interval"
+    #[serde(rename = "type")]
+    pub rule_type: String,
+    /// daily 用，"HH:MM"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// interval 用，数值
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<u32>,
+    /// interval 用，"minutes" | "hours" | "days"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReminderStatus {
+    Pending,
+    Triggered,
+    Snoozed,
+    Completed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reminder {
+    pub id: String,
+    pub node_id: String,
+    /// 所属 .mmap 文件路径（用于跳转回去）
+    pub source_file: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// 触发时间，ISO 8601 本地（"2026-07-15T15:30:00"）
+    pub trigger_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat_rule: Option<RepeatRule>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<ReminderStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_triggered_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snoozed_until: Option<String>,
+    /// 下次触发时间（缓存，调度器用）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_trigger_at: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl Reminder {
+    pub fn new(
+        node_id: impl Into<String>,
+        source_file: impl Into<String>,
+        title: impl Into<String>,
+        trigger_at: impl Into<String>,
+    ) -> Self {
+        let now = chrono::Utc::now();
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            node_id: node_id.into(),
+            source_file: source_file.into(),
+            title: title.into(),
+            message: None,
+            trigger_at: trigger_at.into(),
+            repeat_rule: None,
+            priority: None,
+            enabled: true,
+            status: Some(ReminderStatus::Pending),
+            last_triggered_at: None,
+            snoozed_until: None,
+            next_trigger_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReminderIndex {
+    #[serde(default = "default_config_version")]
+    pub version: String,
+    #[serde(default)]
+    pub reminders: Vec<Reminder>,
+}
+
+impl ReminderIndex {
+    pub fn add_or_replace(&mut self, reminder: Reminder) {
+        if let Some(slot) = self
+            .reminders
+            .iter_mut()
+            .find(|r| r.id == reminder.id)
+        {
+            *slot = reminder;
+        } else {
+            self.reminders.push(reminder);
+        }
+    }
+
+    pub fn remove(&mut self, id: &str) -> bool {
+        let before = self.reminders.len();
+        self.reminders.retain(|r| r.id != id);
+        self.reminders.len() < before
+    }
+
+    pub fn get_for_node(&self, node_id: &str) -> Vec<&Reminder> {
+        self.reminders
+            .iter()
+            .filter(|r| r.node_id == node_id)
+            .collect()
+    }
+}
+
 // ===== recent-files.json =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

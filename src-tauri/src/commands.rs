@@ -6,7 +6,7 @@ use crate::config::{
 };
 use crate::error::Result;
 use crate::mmap::MmapFile;
-use crate::models::{Config, Content, RecentFiles};
+use crate::models::{Config, Content, RecentFiles, Reminder, ReminderIndex};
 
 // ===== 配置相关 =====
 
@@ -206,4 +206,37 @@ pub fn import_opml_file(path: String) -> Result<Content> {
 #[tauri::command]
 pub fn import_opml_string(opml: String) -> Result<Content> {
     crate::opml::import_opml(&opml)
+}
+
+// ===== Reminder CRUD (Phase 11.5) =====
+
+#[tauri::command]
+pub fn get_reminders() -> Result<ReminderIndex> {
+    crate::config::load_reminders()
+}
+
+#[tauri::command]
+pub fn upsert_reminder(reminder: Reminder) -> Result<ReminderIndex> {
+    let mut idx = crate::config::load_reminders()?;
+    idx.add_or_replace(reminder);
+    crate::config::save_reminders(&idx)?;
+    Ok(idx)
+}
+
+#[tauri::command]
+pub fn delete_reminder(id: String) -> Result<ReminderIndex> {
+    let mut idx = crate::config::load_reminders()?;
+    idx.remove(&id);
+    crate::config::save_reminders(&idx)?;
+    Ok(idx)
+}
+
+#[tauri::command]
+pub fn get_reminders_for_node(node_id: String) -> Result<Vec<Reminder>> {
+    let idx = crate::config::load_reminders()?;
+    Ok(idx
+        .reminders
+        .into_iter()
+        .filter(|r| r.node_id == node_id)
+        .collect())
 }

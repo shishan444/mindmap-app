@@ -28,6 +28,27 @@ pub fn reminders_path() -> Result<PathBuf> {
     Ok(app_data_dir()?.join("reminders.json"))
 }
 
+/// 读 reminders.json（Phase 11.5）
+pub fn load_reminders() -> Result<crate::models::ReminderIndex> {
+    let path = reminders_path()?;
+    if !path.exists() {
+        return Ok(crate::models::ReminderIndex::default());
+    }
+    let s = fs::read_to_string(&path)?;
+    if s.trim().is_empty() {
+        return Ok(crate::models::ReminderIndex::default());
+    }
+    Ok(serde_json::from_str(&s)?)
+}
+
+/// 写 reminders.json（原子写入）
+pub fn save_reminders(idx: &crate::models::ReminderIndex) -> Result<()> {
+    ensure_app_data_dir()?;
+    let path = reminders_path()?;
+    let bytes = serde_json::to_vec_pretty(idx)?;
+    atomic_write_json(&path, &bytes)
+}
+
 /// 确保目录存在
 pub fn ensure_app_data_dir() -> Result<()> {
     let dir = app_data_dir()?;

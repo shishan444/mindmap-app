@@ -57,6 +57,10 @@ pub fn run() {
             commands::export_opml,
             commands::import_opml_file,
             commands::import_opml_string,
+            commands::get_reminders,
+            commands::upsert_reminder,
+            commands::delete_reminder,
+            commands::get_reminders_for_node,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

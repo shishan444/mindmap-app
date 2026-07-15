@@ -108,6 +108,38 @@ export interface RecentFiles {
 
 export type SidebarTab = "properties" | "reminders" | "style" | "outline";
 
+// ===== Reminder（Phase 11.5）=====
+
+export interface ReminderRepeatRule {
+  type: "daily" | "interval";
+  time?: string; // daily 用 "HH:MM"
+  value?: number; // interval 用
+  unit?: "minutes" | "hours" | "days" | string;
+}
+
+export interface Reminder {
+  id: string;
+  node_id: string;
+  source_file: string;
+  title: string;
+  message: string | null;
+  trigger_at: string;
+  repeat_rule: ReminderRepeatRule | null;
+  priority: Priority | null;
+  enabled: boolean;
+  status: "pending" | "triggered" | "snoozed" | "completed";
+  last_triggered_at: string | null;
+  snoozed_until: string | null;
+  next_trigger_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReminderIndex {
+  version: string;
+  reminders: Reminder[];
+}
+
 export const PRIORITY_COLORS: Record<Priority, string> = {
   P0: "#E74C3C",
   P1: "#F39C12",
