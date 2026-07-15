@@ -87,8 +87,10 @@ function findNode(
 ): any | null {
   if (!id) return null;
   function dfs(node: any): any | null {
+    if (!node) return null;
     if (node.id === id) return node;
-    for (const c of node.children || []) {
+    const children = node.children ?? [];
+    for (const c of children) {
       const found = dfs(c);
       if (found) return found;
     }

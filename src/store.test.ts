@@ -48,6 +48,45 @@ describe("FE-STORE: setContent", () => {
     useMindMapStore.getState().setContent(makeContent());
     expect(useMindMapStore.getState().dirty).toBe(false);
   });
+
+  // ===== 契约测试：模拟后端真实序列化输出（修复 Phase 12 之前的 bug）=====
+  it("FE-CONTRACT-01: root.children 缺失时不崩溃（旧后端格式）", () => {
+    // 模拟 Phase 12 之前的后端输出：children 字段缺失
+    const buggyContent = {
+      version: "1.0.0",
+      root: { id: "r1", topic: "根" }, // 没有 children 字段
+      canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+    } as any;
+    expect(() => useMindMapStore.getState().setContent(buggyContent)).not.toThrow();
+    expect(useMindMapStore.getState().nodeCount).toBe(1);
+  });
+
+  it("FE-CONTRACT-02: root.children 是空数组时正常", () => {
+    const content = {
+      version: "1.0.0",
+      root: { id: "r1", topic: "根", children: [] },
+      canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+    } as any;
+    useMindMapStore.getState().setContent(content);
+    expect(useMindMapStore.getState().nodeCount).toBe(1);
+  });
+
+  it("FE-CONTRACT-03: 嵌套 children 缺失也不崩溃", () => {
+    const content = {
+      version: "1.0.0",
+      root: {
+        id: "r1",
+        topic: "根",
+        children: [
+          { id: "c1", topic: "子1" }, // 无 children 字段
+          { id: "c2", topic: "子2", children: [] },
+        ],
+      },
+      canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+    } as any;
+    expect(() => useMindMapStore.getState().setContent(content)).not.toThrow();
+    expect(useMindMapStore.getState().nodeCount).toBe(3);
+  });
 });
 
 describe("FE-STORE: dirty & saveStatus", () => {
@@ -238,6 +277,39 @@ describe("FE-EDIT: updateSelectedNode", () => {
     useMindMapStore.getState().setSelectedNodeId("not-exist");
     useMindMapStore.getState().updateSelectedNode({ topic: "新" });
     expect(useMindMapStore.getState().content?.root.topic).toBe("原");
+  });
+
+  // ===== 契约：children 缺失时不崩溃 =====
+  it("FE-EDIT-CONTRACT-01: updateSelectedNode 处理 children=undefined", () => {
+    const content = {
+      version: "1.0.0",
+      root: { id: "r1", topic: "根" }, // 无 children
+      canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+    } as any;
+    useMindMapStore.getState().setContent(content);
+    useMindMapStore.getState().setSelectedNodeId("r1");
+    expect(() =>
+      useMindMapStore.getState().updateSelectedNode({ topic: "改" }),
+    ).not.toThrow();
+    expect(useMindMapStore.getState().content?.root.topic).toBe("改");
+  });
+
+  it("FE-EDIT-CONTRACT-02: updateSelectedNode 处理嵌套 children=undefined", () => {
+    const content = {
+      version: "1.0.0",
+      root: {
+        id: "r1",
+        topic: "根",
+        children: [{ id: "c1", topic: "子1" }], // 子节点无 children
+      },
+      canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+    } as any;
+    useMindMapStore.getState().setContent(content);
+    useMindMapStore.getState().setSelectedNodeId("c1");
+    expect(() =>
+      useMindMapStore.getState().updateSelectedNode({ topic: "改子" }),
+    ).not.toThrow();
+    expect(useMindMapStore.getState().content?.root.children?.[0].topic).toBe("改子");
   });
 
   it("FE-EDIT: updateSelectedNode 标记 dirty", () => {

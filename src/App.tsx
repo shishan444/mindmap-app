@@ -360,11 +360,12 @@ function App() {
 
 /** 查找指定 id 节点的优先级 */
 function findNodePriority(
-  root: { id: string; priority?: Priority; children: any[] },
+  root: { id: string; priority?: Priority; children?: any[] },
   id: string,
 ): Priority | undefined {
   if (root.id === id) return root.priority;
-  for (const c of root.children) {
+  const children = root.children ?? [];
+  for (const c of children) {
     const p = findNodePriority(c, id);
     if (p !== undefined || c.id === id) return p;
   }

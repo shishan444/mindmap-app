@@ -185,9 +185,10 @@ export function getHistoryInfo() {
   };
 }
 
-function countNodes(node: { children: any[] }): number {
+function countNodes(node: { children?: any[] }): number {
   let n = 1;
-  for (const c of node.children) n += countNodes(c);
+  const children = node.children ?? [];
+  for (const c of children) n += countNodes(c);
   return n;
 }
 
@@ -200,10 +201,11 @@ function updateNodeById(
   if (node.id === id) {
     return { ...node, ...updates };
   }
-  for (let i = 0; i < node.children.length; i++) {
-    const updated = updateNodeById(node.children[i], id, updates);
+  const children = node.children ?? [];
+  for (let i = 0; i < children.length; i++) {
+    const updated = updateNodeById(children[i], id, updates);
     if (updated) {
-      const newChildren = [...node.children];
+      const newChildren = [...children];
       newChildren[i] = updated;
       return { ...node, children: newChildren };
     }

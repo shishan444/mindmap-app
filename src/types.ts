@@ -26,11 +26,11 @@ export interface MindNode {
   note?: string;
   priority?: Priority;
   image?: NodeImage;
-  icons?: string[];
+  icons?: string[];           // 后端总是输出 []，但前端防御性处理 undefined
   reminder_ids?: string[];
   style?: NodeStyle;
   collapsed?: boolean;
-  children: MindNode[];
+  children?: MindNode[];      // 历史数据可能缺失，所有访问用 ?? [] 防御
 }
 
 export interface CanvasState {

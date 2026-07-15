@@ -256,17 +256,13 @@ fn int_save_mmap_preserves_created_at_across_saves() {
     let c = commands::new_mmap(Some("主题".into())).unwrap();
     commands::save_mmap(path.to_string_lossy().into(), c.clone()).unwrap();
 
-    // 第一次保存后的 created_at
     let first = commands::open_mmap(path.to_string_lossy().into()).unwrap();
-    // 通过读 meta 拿 created_at
     let mmap_first =
         mindmap_app_lib::mmap::MmapFile::read_from_path(&path).unwrap();
     let created_first = mmap_first.meta.created_at;
 
-    // 等待一下让 modified_at 必然不同
     std::thread::sleep(std::time::Duration::from_millis(20));
 
-    // 第二次保存
     commands::save_mmap(path.to_string_lossy().into(), c.clone()).unwrap();
     let mmap_second =
         mindmap_app_lib::mmap::MmapFile::read_from_path(&path).unwrap();
@@ -282,6 +278,94 @@ fn int_save_mmap_preserves_created_at_across_saves() {
         "modified_at 应大于 created_at"
     );
     let _ = first;
+}
+
+// ===== Contract tests：验证 Tauri command 输出的 JSON 格式契约 =====
+// 这些测试防止 Phase 12 之前的 bug 复现：
+// Vec 字段（children/icons/reminder_ids）必须总是序列化（即使空），
+// 否则前端 TS 类型（必填）会拿到 undefined → 崩溃。
+
+#[test]
+fn int_contract_new_mmap_json_has_required_vec_fields() {
+    let _td = TestDir::new("contract_new");
+    let c = commands::new_mmap(Some("测试".into())).unwrap();
+    let json = serde_json::to_string(&c).unwrap();
+    // 必须包含这些字段（即使空数组）
+    assert!(
+        json.contains("\"children\":[]"),
+        "new_mmap 输出必须含 children:[]，实际: {}",
+        json
+    );
+    assert!(
+        json.contains("\"icons\":[]"),
+        "new_mmap 输出必须含 icons:[]，实际: {}",
+        json
+    );
+    assert!(
+        json.contains("\"reminder_ids\":[]"),
+        "new_mmap 输出必须含 reminder_ids:[]，实际: {}",
+        json
+    );
+    assert!(
+        json.contains("\"style\":"),
+        "new_mmap 输出必须含 style，实际: {}",
+        json
+    );
+    assert!(
+        json.contains("\"collapsed\":"),
+        "new_mmap 输出必须含 collapsed，实际: {}",
+        json
+    );
+}
+
+#[test]
+fn int_contract_save_open_roundtrip_preserves_vec_fields() {
+    let _td = TestDir::new("contract_roundtrip");
+    let path = _td.path.join("test.mmap");
+
+    let c = commands::new_mmap(Some("根".into())).unwrap();
+    commands::save_mmap(path.to_string_lossy().into(), c).unwrap();
+
+    let loaded = commands::open_mmap(path.to_string_lossy().into()).unwrap();
+    let json = serde_json::to_string(&loaded).unwrap();
+    // 往返后仍必须含 Vec 字段
+    assert!(
+        json.contains("\"children\":[]"),
+        "open_mmap 后 JSON 必须含 children:[]，实际: {}",
+        json
+    );
+    assert!(
+        json.contains("\"icons\":[]"),
+        "open_mmap 后 JSON 必须含 icons:[]，实际: {}",
+        json
+    );
+}
+
+#[test]
+fn int_contract_node_with_children_serializes_recursively() {
+    let _td = TestDir::new("contract_nested");
+    use mindmap_app_lib::models::{Node, Content};
+    let mut root = Node::new("根");
+    let mut child = Node::new("子");
+    child.children.push(Node::new("孙")); // 孙的 children 是空 vec
+    root.children.push(child);
+
+    let c = Content {
+        version: "1.0.0".into(),
+        root,
+        canvas_state: Default::default(),
+    };
+    let _ = c;
+    let json = serde_json::to_string(&c).unwrap();
+    // 孙节点的 children:[] 也必须存在
+    // 数 children:[ 的出现次数（根 + 子 + 孙）
+    let count = json.matches("\"children\":").count();
+    assert!(
+        count >= 3,
+        "3 个节点都应有 children 字段，实际 {} 个，json: {}",
+        count,
+        json
+    );
 }
 
 // make_content_with_children 当前未使用，但作为参考保留

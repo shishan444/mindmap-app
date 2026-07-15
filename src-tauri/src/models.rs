@@ -52,15 +52,17 @@ pub struct Node {
     pub priority: Option<Priority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<NodeImage>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// 关键：Vec 字段必须总是序列化（即使空），前端 TS 类型是必填
+    /// 如果用 skip_serializing_if="Vec::is_empty"，空 Vec 不序列化 → 前端拿到 undefined → crash
+    #[serde(default)]
     pub icons: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub reminder_ids: Vec<String>,
     #[serde(default)]
     pub style: NodeStyle,
     #[serde(default)]
     pub collapsed: bool,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub children: Vec<Node>,
 }
 
@@ -601,17 +603,29 @@ mod tests {
     }
 
     #[test]
-    fn node_skip_serializing_if_none() {
+    fn node_always_serializes_vec_fields() {
+        // 关键契约：Vec 字段（children/icons/reminder_ids）必须总是序列化（即使空）
+        // 否则前端 TS 类型（必填）会拿到 undefined → crash
         let n = Node::new("x");
         let json = serde_json::to_string(&n).unwrap();
-        // 这些字段为 None 时不输出
+        assert!(
+            json.contains("\"children\":[]"),
+            "children 必须总是输出，实际: {}",
+            json
+        );
+        assert!(
+            json.contains("\"icons\":[]"),
+            "icons 必须总是输出，实际: {}",
+            json
+        );
+        assert!(
+            json.contains("\"reminder_ids\":[]"),
+            "reminder_ids 必须总是输出，实际: {}",
+            json
+        );
+        // Option 字段为 None 时仍跳过（不影响）
         assert!(!json.contains("\"note\""));
         assert!(!json.contains("\"priority\""));
-        assert!(!json.contains("\"image\""));
-        assert!(!json.contains("\"icons\""));
-        assert!(!json.contains("\"reminder_ids\""));
-        // 默认 collapsed=false 也会序列化（bool 默认不 skip）
-        // collapsed 用 #[serde(default)] 但没 skip，所以会输出
     }
 
     #[test]
