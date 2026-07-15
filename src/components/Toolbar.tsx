@@ -8,6 +8,10 @@ interface Props {
   onOpen: () => void;
   onSave: () => void;
   onExportPng: () => void;
+  onExportMarkdown: () => void;
+  onExportOpml: () => void;
+  onImportMarkdown: () => void;
+  onImportOpml: () => void;
   onSetPriority: (p: Priority) => void;
 }
 
@@ -16,6 +20,10 @@ export default function Toolbar({
   onOpen,
   onSave,
   onExportPng,
+  onExportMarkdown,
+  onExportOpml,
+  onImportMarkdown,
+  onImportOpml,
   onSetPriority,
 }: Props) {
   const dirty = useMindMapStore((s) => s.dirty);
@@ -76,14 +84,35 @@ export default function Toolbar({
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
-        <button
-          className="tb-btn"
-          onClick={onExportPng}
-          title="导出 PNG"
-          disabled={!content}
-        >
-          📤 PNG
-        </button>
+        <div className="priority-dropdown" title="导出">
+          <button className="tb-btn" disabled={!content}>
+            📤 导出 ▾
+          </button>
+          <div className="dropdown-menu">
+            <button className="dropdown-item" onClick={onExportPng}>
+              📷 PNG 图片
+            </button>
+            <button className="dropdown-item" onClick={onExportMarkdown}>
+              📝 Markdown (.md)
+            </button>
+            <button className="dropdown-item" onClick={onExportOpml}>
+              🌐 OPML (.opml)
+            </button>
+          </div>
+        </div>
+        <div className="priority-dropdown" title="导入">
+          <button className="tb-btn">
+            📥 导入 ▾
+          </button>
+          <div className="dropdown-menu">
+            <button className="dropdown-item" onClick={onImportMarkdown}>
+              📝 Markdown (.md)
+            </button>
+            <button className="dropdown-item" onClick={onImportOpml}>
+              🌐 OPML (.opml)
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="toolbar-spacer" />

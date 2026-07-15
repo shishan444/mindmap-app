@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod markdown;
 pub mod mmap;
 pub mod models;
 
@@ -49,6 +50,9 @@ pub fn run() {
             commands::path_exists,
             commands::ping,
             commands::save_bytes,
+            commands::export_markdown,
+            commands::import_markdown_file,
+            commands::import_markdown_string,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

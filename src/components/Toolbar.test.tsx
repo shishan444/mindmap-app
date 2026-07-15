@@ -16,23 +16,25 @@ function renderToolbar(handlers: any = {}) {
     onOpen: handlers.onOpen || vi.fn(),
     onSave: handlers.onSave || vi.fn(),
     onExportPng: handlers.onExportPng || vi.fn(),
+    onExportMarkdown: handlers.onExportMarkdown || vi.fn(),
+    onExportOpml: handlers.onExportOpml || vi.fn(),
+    onImportMarkdown: handlers.onImportMarkdown || vi.fn(),
+    onImportOpml: handlers.onImportOpml || vi.fn(),
     onSetPriority: handlers.onSetPriority || vi.fn(),
   };
   return { ...props, result: render(<Toolbar {...props} />) };
 }
 
-describe("FE-TOOLBAR: 按钮显隐与状态", () => {
-  it("FE-TOOLBAR-01: 无 content 时 onSave 按钮禁用", () => {
+describe("FE-TOOLBAR", () => {
+  it("FE-TOOLBAR-01: 无 content 时 onSave 禁用", () => {
     renderToolbar();
-    const saveBtn = screen.getByTitle("保存");
-    expect(saveBtn).toBeDisabled();
+    expect(screen.getByTitle("保存")).toBeDisabled();
   });
 
   it("FE-TOOLBAR-01b: 有 content 时 onSave 启用", () => {
     useMindMapStore.setState({ content: { root: { id: "x" } } as any });
     renderToolbar();
-    const saveBtn = screen.getByTitle("保存");
-    expect(saveBtn).not.toBeDisabled();
+    expect(screen.getByTitle("保存")).not.toBeDisabled();
   });
 
   it("FE-TOOLBAR-02: dirty=true 时保存按钮显示 *", () => {
@@ -41,8 +43,7 @@ describe("FE-TOOLBAR: 按钮显隐与状态", () => {
       dirty: true,
     });
     renderToolbar();
-    const saveBtn = screen.getByTitle("保存");
-    expect(saveBtn.textContent).toContain("*");
+    expect(screen.getByTitle("保存").textContent).toContain("*");
   });
 
   it("FE-TOOLBAR-02b: dirty=false 时保存按钮不显示 *", () => {
@@ -51,12 +52,9 @@ describe("FE-TOOLBAR: 按钮显隐与状态", () => {
       dirty: false,
     });
     renderToolbar();
-    const saveBtn = screen.getByTitle("保存");
-    expect(saveBtn.textContent).not.toContain("*");
+    expect(screen.getByTitle("保存").textContent).not.toContain("*");
   });
-});
 
-describe("FE-TOOLBAR: 点击回调", () => {
   it("FE-TOOLBAR: 点击新建按钮触发 onNew", () => {
     const onNew = vi.fn();
     renderToolbar({ onNew });
@@ -71,7 +69,7 @@ describe("FE-TOOLBAR: 点击回调", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("FE-TOOLBAR: 点击保存按钮触发 onSave（content 存在时）", () => {
+  it("FE-TOOLBAR: 点击保存按钮触发 onSave", () => {
     const onSave = vi.fn();
     useMindMapStore.setState({ content: { root: { id: "x" } } as any });
     renderToolbar({ onSave });
@@ -79,21 +77,48 @@ describe("FE-TOOLBAR: 点击回调", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  it("FE-TOOLBAR-03: 点击 PNG 按钮触发 onExportPng", () => {
+  it("FE-TOOLBAR-03: 点击 PNG 项触发 onExportPng", () => {
     const onExportPng = vi.fn();
     useMindMapStore.setState({ content: { root: { id: "x" } } as any });
     renderToolbar({ onExportPng });
-    fireEvent.click(screen.getByTitle("导出 PNG"));
+    fireEvent.click(screen.getByText("📷 PNG 图片"));
     expect(onExportPng).toHaveBeenCalledTimes(1);
   });
 
-  it("FE-TOOLBAR: 无 content 时 PNG 按钮禁用", () => {
+  it("FE-TOOLBAR: 无 content 时导出触发器禁用", () => {
     renderToolbar();
-    expect(screen.getByTitle("导出 PNG")).toBeDisabled();
+    const exportTrigger = screen.getByText(/导出 ▾/)?.closest("button");
+    expect(exportTrigger).toBeDisabled();
   });
-});
 
-describe("FE-TOOLBAR: 品牌区", () => {
+  it("FE-TOOLBAR: 点击 Markdown 导出触发 onExportMarkdown", () => {
+    const onExportMarkdown = vi.fn();
+    useMindMapStore.setState({ content: { root: { id: "x" } } as any });
+    renderToolbar({ onExportMarkdown });
+    // 导出下拉里的 MD（第一个 📝）
+    const mdItems = screen.getAllByText("📝 Markdown (.md)");
+    fireEvent.click(mdItems[0]);
+    expect(onExportMarkdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("FE-TOOLBAR: 点击导入 Markdown 触发 onImportMarkdown", () => {
+    const onImportMarkdown = vi.fn();
+    renderToolbar({ onImportMarkdown });
+    const mdItems = screen.getAllByText("📝 Markdown (.md)");
+    // 第二个是导入下拉里的
+    fireEvent.click(mdItems[1]);
+    expect(onImportMarkdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("FE-TOOLBAR: 点击 OPML 导出触发 onExportOpml", () => {
+    const onExportOpml = vi.fn();
+    useMindMapStore.setState({ content: { root: { id: "x" } } as any });
+    renderToolbar({ onExportOpml });
+    const opmlItems = screen.getAllByText("🌐 OPML (.opml)");
+    fireEvent.click(opmlItems[0]);
+    expect(onExportOpml).toHaveBeenCalledTimes(1);
+  });
+
   it("FE-TOOLBAR: 渲染 🧠 品牌图标", () => {
     renderToolbar();
     expect(screen.getByText("🧠")).toBeInTheDocument();

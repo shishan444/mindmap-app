@@ -177,7 +177,6 @@ function App() {
     try {
       const result = await exportPng(mindInstanceRef.current);
       if (result) {
-        // 短暂提示，不打断
         console.log("[App] PNG 已导出:", result);
       }
     } catch (e) {
@@ -185,6 +184,69 @@ function App() {
       alert("PNG 导出失败: " + e);
     }
   };
+
+  const handleExportMarkdown = async () => {
+    const state = useMindMapStore.getState();
+    if (!state.content) return;
+    try {
+      const md = await invoke<string>("export_markdown", { content: state.content });
+      const defaultName = `${state.content.root.topic || "思维导图"}.md`;
+      const defaultPath = state.config?.last_export_dir
+        ? `${state.config.last_export_dir}/${defaultName}`
+        : defaultName;
+      const filePath = await saveDialog({
+        defaultPath,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!filePath) return;
+      const bytes = new TextEncoder().encode(md);
+      await invoke("save_bytes", {
+        path: filePath,
+        data: Array.from(bytes),
+      });
+      const dir = filePath.split("/").slice(0, -1).join("/");
+      if (dir) {
+        await invoke("update_last_dirs", {
+          openDir: null,
+          exportDir: dir,
+          importDir: null,
+        });
+      }
+    } catch (e) {
+      console.error("[App] Markdown 导出失败", e);
+      alert("Markdown 导出失败: " + e);
+    }
+  };
+
+  const handleImportMarkdown = async () => {
+    const state = useMindMapStore.getState();
+    try {
+      const selected = await openDialog({
+        defaultPath: state.config?.last_import_dir ?? undefined,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+        multiple: false,
+      });
+      if (typeof selected !== "string" || !selected) return;
+      const c = await invoke<Content>("import_markdown_file", { path: selected });
+      setContent(c);
+      setFilePath(null);
+      const dir = selected.split("/").slice(0, -1).join("/");
+      if (dir) {
+        await invoke("update_last_dirs", {
+          openDir: null,
+          exportDir: null,
+          importDir: dir,
+        });
+      }
+    } catch (e) {
+      console.error("[App] Markdown 导入失败", e);
+      alert("Markdown 导入失败: " + e);
+    }
+  };
+
+  // Phase 11.2 占位
+  const handleExportOpml = () => alert("OPML 导出：Phase 11.2 即将实现");
+  const handleImportOpml = () => alert("OPML 导入：Phase 11.2 即将实现");
 
   if (!booted) {
     return <div className="app-booting">加载中...</div>;
@@ -197,6 +259,10 @@ function App() {
         onOpen={handleOpen}
         onSave={handleSave}
         onExportPng={handleExportPng}
+        onExportMarkdown={handleExportMarkdown}
+        onExportOpml={handleExportOpml}
+        onImportMarkdown={handleImportMarkdown}
+        onImportOpml={handleImportOpml}
         onSetPriority={handleSetPriority}
       />
       <div className="app-main">

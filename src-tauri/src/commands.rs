@@ -171,3 +171,21 @@ pub fn save_bytes(path: String, data: Vec<u8>) -> Result<()> {
     std::fs::write(&p, &data)?;
     Ok(())
 }
+
+// ===== Markdown 导入导出 =====
+
+#[tauri::command]
+pub fn export_markdown(content: Content) -> Result<String> {
+    Ok(crate::markdown::export_markdown(&content))
+}
+
+#[tauri::command]
+pub fn import_markdown_file(path: String) -> Result<Content> {
+    let s = std::fs::read_to_string(&path)?;
+    crate::markdown::import_markdown(&s)
+}
+
+#[tauri::command]
+pub fn import_markdown_string(md: String) -> Result<Content> {
+    crate::markdown::import_markdown(&md)
+}
