@@ -114,12 +114,16 @@ describe("FE-ADAPT: nodeToMindElixirNode 扩展字段保留", () => {
     expect(me.reminder_ids).toEqual(["rem-1", "rem-2"]);
   });
 
-  it("FE-ADAPT-13: image 字段保留", () => {
+  it("FE-ADAPT-13: image 字段保留（path 转 url）", () => {
     const node = makeNode({
-      image: { path: "assets/abc.png", width: 100, height: 50 },
+      image: { path: "data:image/png;base64,xxx", width: 100, height: 50 },
     });
     const me = nodeToMindElixirNode(node);
-    expect(me.image).toEqual({ path: "assets/abc.png", width: 100, height: 50 });
+    expect(me.image).toEqual({
+      url: "data:image/png;base64,xxx",
+      width: 100,
+      height: 50,
+    });
   });
 
   it("FE-ADAPT-14: style 字段保留", () => {

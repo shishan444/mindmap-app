@@ -5,6 +5,12 @@ import {
   toMindElixirData,
   fromMindElixirData,
 } from "../utils/mindElixirAdapter";
+import {
+  processImageFile,
+  hasImageInDataTransfer,
+  getImageFromDataTransfer,
+  getImageFromClipboard,
+} from "../utils/imageEmbed";
 import "./MindMapCanvas.css";
 
 interface Props {
@@ -98,6 +104,69 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       instanceRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 拖拽/粘贴图片到画布时，给选中节点添加图片
+  useEffect(() => {
+    const wrap = containerRef.current;
+    if (!wrap) return;
+
+    const onDrop = async (e: DragEvent) => {
+      if (!hasImageInDataTransfer(e)) return;
+      e.preventDefault();
+      const file = getImageFromDataTransfer(e);
+      if (!file) return;
+      const state = useMindMapStore.getState();
+      if (!state.content || !state.selectedNodeId) return;
+      try {
+        const processed = await processImageFile(file);
+        state.updateSelectedNode({
+          image: {
+            path: processed.dataUrl,
+            width: processed.width,
+            height: processed.height,
+          },
+        });
+      } catch (err) {
+        console.error("[MindMapCanvas] 图片处理失败", err);
+        alert("图片添加失败: " + err);
+      }
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (hasImageInDataTransfer(e)) {
+        e.preventDefault();
+      }
+    };
+
+    const onPaste = async (e: ClipboardEvent) => {
+      const state = useMindMapStore.getState();
+      if (!state.content || !state.selectedNodeId) return;
+      const file = getImageFromClipboard(e);
+      if (!file) return;
+      e.preventDefault();
+      try {
+        const processed = await processImageFile(file);
+        state.updateSelectedNode({
+          image: {
+            path: processed.dataUrl,
+            width: processed.width,
+            height: processed.height,
+          },
+        });
+      } catch (err) {
+        console.error("[MindMapCanvas] 粘贴图片失败", err);
+      }
+    };
+
+    wrap.addEventListener("drop", onDrop);
+    wrap.addEventListener("dragover", onDragOver);
+    wrap.addEventListener("paste", onPaste);
+    return () => {
+      wrap.removeEventListener("drop", onDrop);
+      wrap.removeEventListener("dragover", onDragOver);
+      wrap.removeEventListener("paste", onPaste);
+    };
   }, []);
 
   // content.root.id 变化时（如切换文档、新建），重新 init mind-elixir

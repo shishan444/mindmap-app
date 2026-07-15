@@ -40,7 +40,14 @@ export function nodeToMindElixirNode(node: MindNode): any {
   if (node.priority !== undefined && node.priority !== null) {
     me.priority = node.priority;
   }
-  if (node.image) me.image = node.image;
+  if (node.image) {
+    // mind-elixir NodeObj.image 用 url；我们的 NodeImage 用 path 存 data URL
+    me.image = {
+      url: node.image.path,
+      width: node.image.width,
+      height: node.image.height,
+    };
+  }
   if (Array.isArray(node.icons) && node.icons.length > 0) me.icons = node.icons;
   if (Array.isArray(node.reminder_ids) && node.reminder_ids.length > 0) {
     me.reminder_ids = node.reminder_ids;
@@ -68,15 +75,22 @@ export function fromMindElixirNode(node: any): MindNode {
       style: {},
     };
   }
+  // image 字段适配：mind-elixir 用 url，我们用 path
+  let image = undefined;
+  if (node.image && typeof node.image === "object") {
+    image = {
+      path: node.image.url ?? node.image.path ?? "",
+      width: node.image.width ?? 0,
+      height: node.image.height ?? 0,
+    };
+  }
   return {
     id: String(node.id ?? ""),
     topic: String(node.topic ?? ""),
-    // expanded=false 或 undefined → collapsed=true；expanded=true → collapsed=false
-    // 默认 expanded 为 true（mind-elixir 行为），所以 undefined 时 collapsed=false
     collapsed: node.expanded === false,
     note: node.note,
     priority: node.priority,
-    image: node.image,
+    image,
     icons: Array.isArray(node.icons) ? node.icons : [],
     reminder_ids: Array.isArray(node.reminder_ids) ? node.reminder_ids : [],
     style:
