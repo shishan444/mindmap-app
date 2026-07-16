@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import MindElixir from "mind-elixir";
+// MindElixir.css 在 index.html 用 <link> 注入（package.json exports 限制）
 import { useMindMapStore } from "../store";
 import {
   toMindElixirData,
@@ -37,8 +38,8 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         draggable: true,
         editable: true,
         contextMenu: true,
-        toolBar: true,
-        keypress: true,
+        toolBar: false, // 禁用浮动 toolbar：与 React 工具栏重复 + 5.14 内部 layout 异常（横铺画布、遮挡节点）
+        keypress: false, // 禁用 mind-elixir keypress：5.14 Nt() noop bug，事件已在 fallback 中处理
         data,
       } as any);
       mind.init(data);

@@ -67,18 +67,7 @@
 }
 
 /* 统一 mind-elixir 浮动工具栏图标大小（避免视觉不一致） */
+/* 注：toolBar 已禁用（构造时 toolBar:false），此规则保留防御 */
 .mind-elixir-inner .mind-elixir-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.mind-elixir-inner .mind-elixir-toolbar svg,
-.mind-elixir-inner .mind-elixir-toolbar img,
-.mind-elixir-inner .mind-elixir-toolbar span {
-  width: 20px !important;
-  height: 20px !important;
-  font-size: 16px !important;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: none !important;
 }
