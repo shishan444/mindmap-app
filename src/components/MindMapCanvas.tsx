@@ -133,7 +133,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!inst) return;
         try {
           inst.selectNode(tpc);
-          setSelectedNodeId(tpc.getAttribute("data-nodeid"));
+          // 用 tpc.nodeObj.id（与 store.content 的 node.id 一致），
+          // 不用 data-nodeid（mind-elixir 给根节点加了 "me" 前缀）
+          const nodeId = (tpc as any).nodeObj?.id || tpc.getAttribute("data-nodeid");
+          setSelectedNodeId(nodeId);
         } catch (err) {
           console.error("[fallback click] selectNode 失败", err);
         }
