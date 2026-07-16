@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "precheck": "bash scripts/precheck.sh",
+    "predev": "bash scripts/precheck.sh",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "pretauri": "bash scripts/precheck.sh",
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
