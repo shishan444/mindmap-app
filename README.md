@@ -6,12 +6,10 @@ Tauri 2 + React 19 + TypeScript + mind-elixir 构建的 macOS 桌面思维导图
 
 | 文档 | 用途 |
 |------|------|
+| [docs/llm-guidelines.md](docs/llm-guidelines.md) | **LLM 工程指引（精华版）——任何任务开始前先读** |
+| [docs/debugging-notes.md](docs/debugging-notes.md) | 按 Phase 组织的踩坑归档（具体 bug 修复案例） |
 | [docs/思维导图桌面客户端设计思路草稿.md](../docs/思维导图桌面客户端设计思路草稿.md) | 23 个设计决策落盘 |
 | [tests/specs/requirements.md](tests/specs/requirements.md) | 70 个测试用例映射 |
-| [docs/meta-rules.md](docs/meta-rules.md) | 11 条工程守则（反 Pattern + 合规做法） |
-| [docs/debugging-notes.md](docs/debugging-notes.md) | 按 Phase 组织的踩坑知识库 |
-| [docs/testing-methodology.md](docs/testing-methodology.md) | 测试金字塔 + 工具 + 模板 |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | 常见问题 + 解决方案 + 工具索引 |
 | [task_plan.md](task_plan.md) | 18 个 Phase 的开发规划 |
 | [findings.md](findings.md) | 研究发现 |
 | [progress.md](progress.md) | 会话日志 |
