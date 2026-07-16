@@ -199,11 +199,14 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           switch (e.key) {
             case "Tab":
               e.preventDefault();
-              inst.addChild(selected);
+              // 传 node 参数跳过 mind-elixir 默认的"自动进入编辑"行为。
+              // 否则 addChild 后 input-box 出现并 focus，用户不知道按 Enter 退出，
+              // 后续 Tab 被困在 input-box 内（被当成缩进），无法继续加节点。
+              inst.addChild(selected, { topic: "New Node" });
               break;
             case "Enter":
               e.preventDefault();
-              if (!isRoot) inst.insertSibling("after", selected);
+              if (!isRoot) inst.insertSibling("after", selected, { topic: "New Node" });
               break;
             case "F2":
               e.preventDefault();
