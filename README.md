@@ -2,8 +2,19 @@
 
 Tauri 2 + React 19 + TypeScript + mind-elixir 构建的 macOS 桌面思维导图应用。
 
-完整设计文档：[../docs/思维导图桌面客户端设计思路草稿.md](../docs/思维导图桌面客户端设计思路草稿.md)（23 个决策落盘）
-测试用例映射：[tests/specs/requirements.md](tests/specs/requirements.md)（70 个用例）
+## 文档索引
+
+| 文档 | 用途 |
+|------|------|
+| [docs/思维导图桌面客户端设计思路草稿.md](../docs/思维导图桌面客户端设计思路草稿.md) | 23 个设计决策落盘 |
+| [tests/specs/requirements.md](tests/specs/requirements.md) | 70 个测试用例映射 |
+| [docs/meta-rules.md](docs/meta-rules.md) | 11 条工程守则（反 Pattern + 合规做法） |
+| [docs/debugging-notes.md](docs/debugging-notes.md) | 按 Phase 组织的踩坑知识库 |
+| [docs/testing-methodology.md](docs/testing-methodology.md) | 测试金字塔 + 工具 + 模板 |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | 常见问题 + 解决方案 + 工具索引 |
+| [task_plan.md](task_plan.md) | 18 个 Phase 的开发规划 |
+| [findings.md](findings.md) | 研究发现 |
+| [progress.md](progress.md) | 会话日志 |
 
 ## 开发命令
 
