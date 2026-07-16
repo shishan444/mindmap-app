@@ -250,17 +250,21 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         }
       };
 
+      // 关键：keydown 绑 document 而非 inner。
+      // 真实用户 click 节点后，焦点落在 map-container（不是 inner），
+      // 绑在 inner 上时 Tab/Enter 事件到不了。
+      // click/dblclick 仍绑 inner（事件冒泡能到，且能过滤非画布点击）。
       inner.addEventListener("click", onFallbackClick);
       inner.addEventListener("dblclick", onFallbackDblClick);
-      inner.addEventListener("keydown", onFallbackKey);
+      document.addEventListener("keydown", onFallbackKey);
     }
 
     return () => {
       if (inner) {
         if (onFallbackClick) inner.removeEventListener("click", onFallbackClick);
         if (onFallbackDblClick) inner.removeEventListener("dblclick", onFallbackDblClick);
-        if (onFallbackKey) inner.removeEventListener("keydown", onFallbackKey);
       }
+      if (onFallbackKey) document.removeEventListener("keydown", onFallbackKey);
       try {
         mind.destroy();
       } catch (e) {
