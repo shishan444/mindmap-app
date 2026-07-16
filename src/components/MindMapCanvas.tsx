@@ -127,6 +127,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!newContent) return;
         if (state.content && state.content.root === newContent.root) return;
         setContent(newContent);
+        // 关键：同步 selectedNodeId 到 mind-elixir 当前选中节点
+        // 否则 TabProperties 等组件显示的还是旧选中
+        const sel = inst.currentNodes?.[0];
+        if (sel?.nodeObj?.id) {
+          setSelectedNodeId(sel.nodeObj.id);
+        }
       } catch (e) {
         console.error("[mind-elixir sync] 失败", e);
       }
@@ -195,18 +201,31 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         const selected = getSelected();
         if (!selected) return;
         const isRoot = selected.tagName === "ME-ROOT";
+        let opChanged = false;
         try {
           switch (e.key) {
             case "Tab":
               e.preventDefault();
-              // 传 node 参数跳过 mind-elixir 默认的"自动进入编辑"行为。
-              // 否则 addChild 后 input-box 出现并 focus，用户不知道按 Enter 退出，
-              // 后续 Tab 被困在 input-box 内（被当成缩进），无法继续加节点。
-              inst.addChild(selected, { topic: "New Node" });
+              // 不传 node 参数：让 mind-elixir 用 generateNewObj 生成完整节点（含正确 id）
+              // 之前传 { topic } 导致 id 为空字符串，破坏后续 selectedNodeId 同步
+              inst.addChild(selected);
+              opChanged = true;
+              // mind-elixir 默认进入编辑模式，立即退出（保留默认 topic "New Node"）
+              setTimeout(() => {
+                const ib = document.querySelector("#input-box") as HTMLElement | null;
+                if (ib) ib.blur();
+              }, 50);
               break;
             case "Enter":
               e.preventDefault();
-              if (!isRoot) inst.insertSibling("after", selected, { topic: "New Node" });
+              if (!isRoot) {
+                inst.insertSibling("after", selected);
+                opChanged = true;
+                setTimeout(() => {
+                  const ib = document.querySelector("#input-box") as HTMLElement | null;
+                  if (ib) ib.blur();
+                }, 50);
+              }
               break;
             case "F2":
               e.preventDefault();
@@ -215,11 +234,19 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             case "Delete":
             case "Backspace":
               e.preventDefault();
-              if (!isRoot) inst.removeNodes(inst.currentNodes || [selected]);
+              if (!isRoot) {
+                inst.removeNodes(inst.currentNodes || [selected]);
+                opChanged = true;
+              }
               break;
           }
         } catch (err) {
           console.error("[fallback keydown] 失败", err);
+        }
+        if (opChanged) {
+          setTimeout(() => {
+            syncFromMindElixir();
+          }, 200);
         }
       };
 

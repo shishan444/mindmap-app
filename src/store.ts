@@ -212,3 +212,8 @@ function updateNodeById(
   }
   return null;
 }
+
+// dev 模式暴露 store 到 window 便于调试
+if (import.meta.env.DEV) {
+  (window as any).__store = useMindMapStore;
+}
