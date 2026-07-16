@@ -49,6 +49,37 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         (window as any).__mind = mind;
         console.log("[MindMapCanvas] mind 实例暴露到 window.__mind");
       }
+
+      // mind-elixir 5.14 的 toCenter 计算有偏差，根节点会偏下；
+      // mind.move 在 5.14 也是 noop（API bug）。
+      // 直接操作 mapCanvas 的 transform 把根节点真正居中到容器。
+      setTimeout(() => {
+        try {
+          const inner = containerRef.current;
+          const meRoot = inner?.querySelector("me-root") as HTMLElement | null;
+          const mapCanvas = inner?.querySelector(".map-canvas") as HTMLElement | null;
+          if (!inner || !meRoot || !mapCanvas) return;
+          const innerRect = inner.getBoundingClientRect();
+          const rootRect = meRoot.getBoundingClientRect();
+          const dx =
+            (innerRect.x + innerRect.width / 2) -
+            (rootRect.x + rootRect.width / 2);
+          const dy =
+            (innerRect.y + innerRect.height / 2) -
+            (rootRect.y + rootRect.height / 2);
+          if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return;
+          // 解析当前 transform: translate3d(Xpx, Ypx, 0px) scale(S)
+          const t = mapCanvas.style.transform || "";
+          const m = t.match(/translate3d\(\s*([-\d.]+)px[\s,]+([-\d.]+)px/);
+          const curX = m ? parseFloat(m[1]) : 0;
+          const curY = m ? parseFloat(m[2]) : 0;
+          const scaleMatch = t.match(/scale\(\s*([\d.]+)\s*\)/);
+          const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+          mapCanvas.style.transform = `translate3d(${curX + dx}px, ${curY + dy}px, 0px) scale(${scale})`;
+        } catch (e) {
+          console.error("[MindMapCanvas] centerRoot 失败", e);
+        }
+      }, 100);
     } catch (e) {
       console.error("[MindMapCanvas] init failed:", e);
       return;

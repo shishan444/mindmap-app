@@ -44,6 +44,8 @@
   font-size: 13px;
   color: #333;
   outline: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .field-input:focus,
