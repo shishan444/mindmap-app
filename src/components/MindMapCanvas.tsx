@@ -44,6 +44,11 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       mind.init(data);
       instanceRef.current = mind;
       onCreateInstance?.(mind);
+      // dev 模式暴露到 window 便于调试
+      if (import.meta.env.DEV) {
+        (window as any).__mind = mind;
+        console.log("[MindMapCanvas] mind 实例暴露到 window.__mind");
+      }
     } catch (e) {
       console.error("[MindMapCanvas] init failed:", e);
       return;
@@ -95,7 +100,102 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       }
     }
 
+    // === Fallback 事件处理 ===
+    // mind-elixir 5.14 内部 Nt() 返回 noop（疑似打包 bug），
+    // 导致原生 click/dblclick/keydown 不响应。这里自己绑事件作为兜底。
+    const inner = containerRef.current;
+    let onFallbackClick: ((e: MouseEvent) => void) | null = null;
+    let onFallbackDblClick: ((e: MouseEvent) => void) | null = null;
+    let onFallbackKey: ((e: KeyboardEvent) => void) | null = null;
+
+    if (inner) {
+      inner.setAttribute("tabindex", "0");
+      inner.style.outline = "none";
+
+      const getMeTpc = (target: EventTarget | null): HTMLElement | null => {
+        if (!(target instanceof HTMLElement)) return null;
+        return target.closest("me-tpc") as HTMLElement | null;
+      };
+
+      const getSelected = (): any | null => {
+        const inst = instanceRef.current;
+        if (!inst) return null;
+        const cn = inst.currentNodes;
+        if (Array.isArray(cn) && cn.length > 0) return cn[0];
+        const sel = inner.querySelector("me-tpc.selected") as any;
+        return sel || null;
+      };
+
+      onFallbackClick = (e: MouseEvent) => {
+        const tpc = getMeTpc(e.target);
+        if (!tpc) return;
+        const inst = instanceRef.current;
+        if (!inst) return;
+        try {
+          inst.selectNode(tpc);
+          setSelectedNodeId(tpc.getAttribute("data-nodeid"));
+        } catch (err) {
+          console.error("[fallback click] selectNode 失败", err);
+        }
+      };
+
+      onFallbackDblClick = (e: MouseEvent) => {
+        const tpc = getMeTpc(e.target);
+        if (!tpc) return;
+        const inst = instanceRef.current;
+        if (!inst) return;
+        try {
+          inst.selectNode(tpc);
+          inst.beginEdit(tpc);
+        } catch (err) {
+          console.error("[fallback dblclick] beginEdit 失败", err);
+        }
+      };
+
+      onFallbackKey = (e: KeyboardEvent) => {
+        const ae = document.activeElement;
+        if (ae && (ae as HTMLElement).isContentEditable) return;
+        const inst = instanceRef.current;
+        if (!inst) return;
+        const selected = getSelected();
+        if (!selected) return;
+        const isRoot = selected.tagName === "ME-ROOT";
+        try {
+          switch (e.key) {
+            case "Tab":
+              e.preventDefault();
+              inst.addChild(selected);
+              break;
+            case "Enter":
+              e.preventDefault();
+              if (!isRoot) inst.insertSibling("after", selected);
+              break;
+            case "F2":
+              e.preventDefault();
+              inst.beginEdit(selected);
+              break;
+            case "Delete":
+            case "Backspace":
+              e.preventDefault();
+              if (!isRoot) inst.removeNodes(inst.currentNodes || [selected]);
+              break;
+          }
+        } catch (err) {
+          console.error("[fallback keydown] 失败", err);
+        }
+      };
+
+      inner.addEventListener("click", onFallbackClick);
+      inner.addEventListener("dblclick", onFallbackDblClick);
+      inner.addEventListener("keydown", onFallbackKey);
+    }
+
     return () => {
+      if (inner) {
+        if (onFallbackClick) inner.removeEventListener("click", onFallbackClick);
+        if (onFallbackDblClick) inner.removeEventListener("dblclick", onFallbackDblClick);
+        if (onFallbackKey) inner.removeEventListener("keydown", onFallbackKey);
+      }
       try {
         mind.destroy();
       } catch (e) {

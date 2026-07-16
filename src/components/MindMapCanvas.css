@@ -13,6 +13,23 @@
   z-index: 2;
 }
 
+/* 关键：mind-elixir 5.x 的 click handler 用 ne(target) 检查 target.tagName === 'ME-TPC'。
+   但点击 span.text 子元素时 target 是 SPAN，导致 selectNode 不触发、Tab 加子节点失效。
+   让 me-tpc / me-parent 的子元素 pointer-events: none，事件穿透到 me-tpc 本身。
+   编辑模式时 contenteditable 输入框需要恢复事件。 */
+.mind-elixir-inner me-tpc,
+.mind-elixir-inner me-parent,
+.mind-elixir-inner me-root {
+  pointer-events: auto;
+}
+.mind-elixir-inner me-tpc > *,
+.mind-elixir-inner me-parent > * {
+  pointer-events: none;
+}
+.mind-elixir-inner [contenteditable] {
+  pointer-events: auto !important;
+}
+
 /* 内层容器：mind-elixir 会给它注入 inline style（position:relative 等），
    我们只控制 width/height 让它撑满外层 */
 .mind-elixir-inner {
