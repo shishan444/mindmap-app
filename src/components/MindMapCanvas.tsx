@@ -251,6 +251,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
               setTimeout(() => {
                 const ib = document.querySelector("#input-box") as HTMLElement | null;
                 if (ib) ib.blur();
+                // 关键：blur 后恢复焦点到 map-container，否则焦点丢到 body，
+                // 后续 Tab/Enter/F2 检查 inCanvas 失败 → 不处理
+                const mc = document.querySelector(".map-container") as HTMLElement | null;
+                if (mc) mc.focus();
               }, 50);
               break;
             case "Enter":
@@ -260,6 +264,8 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
                 setTimeout(() => {
                   const ib = document.querySelector("#input-box") as HTMLElement | null;
                   if (ib) ib.blur();
+                  const mc = document.querySelector(".map-container") as HTMLElement | null;
+                  if (mc) mc.focus();
                 }, 50);
               }
               break;
