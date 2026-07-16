@@ -164,60 +164,96 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         return sel || null;
       };
 
+      // === 双击编辑：click 计数兜底 ===
+      // mind-elixir dblclick 事件在某些环境（webkit / chrome-devtools dblClick 工具）不触发。
+      // 用 click 计数模拟：同一节点 400ms 内第二次 click = 双击 = 进入编辑。
+      let lastClickTime = 0;
+      let lastClickTpc: HTMLElement | null = null;
+      let editTriggered = false;  // 防止 dblclick + click 计数重复触发
+
       onFallbackClick = (e: MouseEvent) => {
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
         const inst = instanceRef.current;
         if (!inst) return;
         try {
-          inst.selectNode(tpc);
-          // 用 tpc.nodeObj.id（与 store.content 的 node.id 一致），
-          // 不用 data-nodeid（mind-elixir 给根节点加了 "me" 前缀）
-          const nodeId = (tpc as any).nodeObj?.id || tpc.getAttribute("data-nodeid");
-          setSelectedNodeId(nodeId);
+          const now = Date.now();
+          const isDoubleClick =
+            tpc === lastClickTpc &&
+            now - lastClickTime < 400 &&
+            !editTriggered;
+
+          if (isDoubleClick) {
+            // 双击 → 进入编辑
+            editTriggered = true;
+            setTimeout(() => { editTriggered = false; }, 600);
+            inst.selectNode(tpc);
+            inst.beginEdit(tpc);
+          } else {
+            // 单击 → 选中
+            inst.selectNode(tpc);
+            const nodeId = (tpc as any).nodeObj?.id || tpc.getAttribute("data-nodeid");
+            setSelectedNodeId(nodeId);
+          }
+          lastClickTime = now;
+          lastClickTpc = tpc;
         } catch (err) {
-          console.error("[fallback click] selectNode 失败", err);
+          console.error("[fallback click] 失败", err);
         }
       };
 
       onFallbackDblClick = (e: MouseEvent) => {
+        // dblclick 事件触发时，标记 editTriggered 防止 click 计数重复
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
         const inst = instanceRef.current;
         if (!inst) return;
         try {
+          editTriggered = true;
+          setTimeout(() => { editTriggered = false; }, 600);
           inst.selectNode(tpc);
           inst.beginEdit(tpc);
         } catch (err) {
-          console.error("[fallback dblclick] beginEdit 失败", err);
+          console.error("[fallback dblclick] 失败", err);
         }
       };
 
       onFallbackKey = (e: KeyboardEvent) => {
         const ae = document.activeElement;
+        // 编辑模式（input-box / contenteditable）不拦截
         if (ae && (ae as HTMLElement).isContentEditable) return;
+
+        // 只在画布区域拦截（焦点在 map-container / me-tpc / inner 内）
+        // 否则 Tab 会跳到侧边栏等其他 focusable 元素
+        const inCanvas = ae instanceof HTMLElement
+          ? !!ae.closest(".mind-elixir-inner, .map-container, me-tpc, me-root, me-main, me-parent, me-wrapper")
+          : false;
+        if (!inCanvas) return;
+
         const inst = instanceRef.current;
         if (!inst) return;
+
+        // 画布内的这些键始终拦截（防止焦点跳走）
+        const interceptKeys = ["Tab", "Enter", "F2", "Delete", "Backspace"];
+        if (!interceptKeys.includes(e.key)) return;
+        e.preventDefault();  // 关键：先拦截，避免 Tab 跳侧边栏
+
         const selected = getSelected();
-        if (!selected) return;
+        if (!selected) return;  // 没选中就不做操作（但 Tab 已拦截）
+
         const isRoot = selected.tagName === "ME-ROOT";
         let opChanged = false;
         try {
           switch (e.key) {
             case "Tab":
-              e.preventDefault();
-              // 不传 node 参数：让 mind-elixir 用 generateNewObj 生成完整节点（含正确 id）
-              // 之前传 { topic } 导致 id 为空字符串，破坏后续 selectedNodeId 同步
               inst.addChild(selected);
               opChanged = true;
-              // mind-elixir 默认进入编辑模式，立即退出（保留默认 topic "New Node"）
               setTimeout(() => {
                 const ib = document.querySelector("#input-box") as HTMLElement | null;
                 if (ib) ib.blur();
               }, 50);
               break;
             case "Enter":
-              e.preventDefault();
               if (!isRoot) {
                 inst.insertSibling("after", selected);
                 opChanged = true;
@@ -228,12 +264,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
               }
               break;
             case "F2":
-              e.preventDefault();
               inst.beginEdit(selected);
               break;
             case "Delete":
             case "Backspace":
-              e.preventDefault();
               if (!isRoot) {
                 inst.removeNodes(inst.currentNodes || [selected]);
                 opChanged = true;
@@ -244,9 +278,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           console.error("[fallback keydown] 失败", err);
         }
         if (opChanged) {
-          setTimeout(() => {
-            syncFromMindElixir();
-          }, 200);
+          setTimeout(() => { syncFromMindElixir(); }, 200);
         }
       };
 
