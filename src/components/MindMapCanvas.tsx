@@ -261,6 +261,21 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           return;
         }
 
+        // Cmd+Shift+L 自动布局（整理）
+        if (e.metaKey && e.shiftKey && e.key.toLowerCase() === "l") {
+          e.preventDefault();
+          const inst = instanceRef.current;
+          if (inst?.layout) {
+            try {
+              inst.layout();
+              if (inst.toCenter) inst.toCenter();
+            } catch (err) {
+              console.error("[auto-layout] 失败", err);
+            }
+          }
+          return;
+        }
+
         const interceptKeys = ["Tab", "Enter", "F2", "Delete", "Backspace", "."];
         if (!interceptKeys.includes(e.key)) return;
         e.preventDefault();
