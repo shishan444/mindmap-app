@@ -37,7 +37,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         direction: MindElixir.RIGHT,
         draggable: true,
         editable: true,
-        contextMenu: true,
+        contextMenu: false, // 禁用内置右键菜单（英文，与 fallback 中文菜单重复）
         toolBar: false, // 禁用浮动 toolbar：与 React 工具栏重复 + 5.14 内部 layout 异常（横铺画布、遮挡节点）
         keypress: false, // 禁用 mind-elixir keypress：5.14 Nt() noop bug，事件已在 fallback 中处理
         data,
