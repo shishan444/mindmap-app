@@ -317,9 +317,11 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         startX: number;
         startY: number;
         isDragging: boolean;
+        ghost: HTMLElement | null;
       } | null = null;
 
       const isDescendant = (node: any, targetId: string): boolean => {
+        if (!node || !targetId) return false;
         if (node.id === targetId) return true;
         const children = node.children ?? [];
         for (const c of children) {
@@ -328,17 +330,49 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         return false;
       };
 
+      // 收集节点及其所有子节点的文字（用于 ghost 预览）
+      const collectSubtreeTexts = (nodeObj: any, depth = 0): string[] => {
+        const texts = [`${"  ".repeat(depth)}${nodeObj.topic || "?"}`];
+        for (const c of nodeObj.children ?? []) {
+          texts.push(...collectSubtreeTexts(c, depth + 1));
+        }
+        return texts;
+      };
+
+      const createGhost = (source: HTMLElement): HTMLElement => {
+        const nodeObj = (source as any).nodeObj;
+        const texts = nodeObj ? collectSubtreeTexts(nodeObj) : [source.textContent || "?"];
+
+        const ghost = document.createElement("div");
+        ghost.className = "drag-ghost";
+        ghost.innerHTML = texts
+          .map((t, i) => `<div style="padding-left:${i === 0 ? 0 : 12}px;${i === 0 ? "font-weight:600;" : "opacity:0.7;"}">${t}</div>`)
+          .join("");
+        ghost.style.cssText =
+          "position:fixed;z-index:9999;pointer-events:none;" +
+          "background:rgba(255,255,255,0.95);border:1px solid #4dc4ff;border-radius:6px;" +
+          "padding:6px 10px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" +
+          "max-width:200px;overflow:hidden;white-space:nowrap;";
+        document.body.appendChild(ghost);
+        return ghost;
+      };
+
+      const removeGhost = () => {
+        const g = document.querySelector(".drag-ghost");
+        if (g) g.remove();
+      };
+
       onDragStart = (e: MouseEvent) => {
-        if (e.button !== 0) return; // 只响应左键
+        if (e.button !== 0) return;
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
-        // 根节点不能拖
         if (tpc.closest("me-root")) return;
         dragState = {
           source: tpc,
           startX: e.clientX,
           startY: e.clientY,
           isDragging: false,
+          ghost: null,
         };
       };
 
@@ -349,21 +383,34 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!dragState.isDragging && Math.sqrt(dx * dx + dy * dy) > 5) {
           dragState.isDragging = true;
           inner.style.cursor = "grabbing";
+          // 创建 ghost 预览
+          dragState.ghost = createGhost(dragState.source);
+          // 原节点变半透明（暗示正在拖动）
+          dragState.source.style.opacity = "0.3";
         }
         if (!dragState.isDragging) return;
+
+        // 更新 ghost 位置
+        if (dragState.ghost) {
+          dragState.ghost.style.left = e.clientX + 12 + "px";
+          dragState.ghost.style.top = e.clientY + 12 + "px";
+        }
+
         // 清除之前的高亮
         inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
-        // 检测目标节点
-        const target = getMeTpc(e.target);
+
+        // 检测目标节点（用 elementFromPoint 避免 me-parent 拦截）
+        // 临时隐藏 ghost 否则 elementFromPoint 返回 ghost
+        if (dragState.ghost) dragState.ghost.style.display = "none";
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (dragState.ghost) dragState.ghost.style.display = "";
+
+        const target = el ? getMeTpc(el as HTMLElement) : null;
         if (target && target !== dragState.source) {
-          // 不能拖到自己的子孙上
-          const inst = instanceRef.current;
-          const sourceId = (dragState.source as any).nodeObj?.id;
+          const sourceNodeObj = (dragState.source as any).nodeObj;
           const targetId = (target as any).nodeObj?.id;
-          if (inst?.nodeData && sourceId && isDescendant(inst.nodeData, targetId) && isDescendant(
-            (dragState.source as any).nodeObj, targetId
-          )) {
-            return; // 目标是源的子孙，忽略
+          if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
+            return; // 目标是源的子孙
           }
           target.classList.add("drag-over");
         }
@@ -372,6 +419,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       onDragEnd = (e: MouseEvent) => {
         if (!dragState) return;
         inner.style.cursor = "";
+
+        // 恢复源节点透明度
+        dragState.source.style.opacity = "";
+
+        // 移除 ghost
+        removeGhost();
         inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
 
         if (!dragState.isDragging) {
@@ -379,22 +432,26 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           return;
         }
 
-        const target = getMeTpc(e.target);
+        // 用 elementFromPoint 找目标（mouseup 的 target 在 WebKit 下可能不准）
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const target = el ? getMeTpc(el as HTMLElement) : null;
+
         if (target && target !== dragState.source) {
           const inst = instanceRef.current;
           try {
-            // 判断位置：上 25% = before, 下 25% = after, 中间 = in(作为子)
             const r = target.getBoundingClientRect();
             const relY = (e.clientY - r.top) / r.height;
             const sourceTpc = dragState.source;
 
-            // 不能拖到自己的子孙上
             const sourceNodeObj = (sourceTpc as any).nodeObj;
             const targetId = (target as any).nodeObj?.id;
             if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
               dragState = null;
               return;
             }
+
+            // 记录操作前 nodeData 用于诊断
+            const beforeNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
 
             if (relY < 0.25) {
               inst.moveNodeBefore([sourceTpc], target);
@@ -403,6 +460,14 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             } else {
               inst.moveNodeIn([sourceTpc], target);
             }
+
+            const afterNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
+
+            // 如果 nodeData 没变化，说明 moveNode 失败（可能 API bug）
+            if (beforeNodeData === afterNodeData) {
+              console.warn("[drag] moveNode 未改变 nodeData——操作无效");
+            }
+
             setTimeout(() => { syncFromMindElixir(); }, 200);
           } catch (err) {
             console.error("[fallback drag] 失败", err);
