@@ -46,6 +46,10 @@ interface MindMapState {
   openPreferences: () => void;
   closePreferences: () => void;
   replaceConfig: (cfg: Config) => void;
+
+  // mind-elixir 实例引用（不进撤销重做历史）
+  mindInstance: any | null;
+  setMindInstance: (mind: any | null) => void;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -141,6 +145,9 @@ export const useMindMapStore = create<MindMapState>()(
           sidebarCollapsed: cfg.window_state.sidebar_collapsed,
           sidebarWidth: cfg.window_state.sidebar_width,
         }),
+
+      mindInstance: null,
+      setMindInstance: (mind) => set({ mindInstance: mind }),
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）

@@ -25,6 +25,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
   const setContent = useMindMapStore((s) => s.setContent);
   const setSelectedNodeId = useMindMapStore((s) => s.setSelectedNodeId);
   const markDirty = useMindMapStore((s) => s.markDirty);
+  const setMindInstance = useMindMapStore((s) => s.setMindInstance);
 
   // 初始化 mind-elixir（仅 mount 一次）
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       mind.init(data);
       instanceRef.current = mind;
       onCreateInstance?.(mind);
+      setMindInstance(mind);
       // dev 模式暴露到 window 便于调试
       if (import.meta.env.DEV) {
         (window as any).__mind = mind;
@@ -614,6 +616,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         console.error("[mind-elixir] destroy 失败", e);
       }
       instanceRef.current = null;
+      setMindInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
