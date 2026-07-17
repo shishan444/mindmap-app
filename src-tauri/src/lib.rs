@@ -7,6 +7,7 @@ pub mod mmap;
 pub mod models;
 pub mod opml;
 pub mod reminder_scheduler;
+pub mod freemind;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -74,6 +75,7 @@ pub fn run() {
             commands::get_reminders_for_node,
             commands::log_event,
             commands::is_dev_logger_ready,
+            commands::import_freemind_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

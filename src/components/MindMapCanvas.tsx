@@ -26,6 +26,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
   const setSelectedNodeId = useMindMapStore((s) => s.setSelectedNodeId);
   const markDirty = useMindMapStore((s) => s.markDirty);
   const setMindInstance = useMindMapStore((s) => s.setMindInstance);
+  const theme = useMindMapStore((s) => s.config?.ui.theme || "system");
 
   // 初始化 mind-elixir（仅 mount 一次）
   useEffect(() => {
@@ -716,6 +717,18 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content?.root.id]);
+
+  // 明暗主题：给 .mind-elixir-inner 加/去 dark-theme class
+  useEffect(() => {
+    const inner = containerRef.current;
+    if (!inner) return;
+    const isDark = theme === "dark";
+    if (isDark) {
+      inner.classList.add("dark-theme");
+    } else {
+      inner.classList.remove("dark-theme");
+    }
+  }, [theme]);
 
   return (
     <div className="canvas-container">

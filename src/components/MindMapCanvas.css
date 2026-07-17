@@ -111,3 +111,23 @@
   background: #eee;
   margin: 4px 0;
 }
+
+/* 深色主题：覆盖 mind-elixir CSS 变量 */
+.mind-elixir-inner.dark-theme .map-container {
+  --bgcolor: #1a1a2e;
+  --color: #e0e0e0;
+  --main-bgcolor: #16213e;
+  --main-color: #e0e0e0;
+  --main-bgcolor-transparent: rgba(22, 33, 62, 0.8);
+  --root-bgcolor: #0f3460;
+  --root-color: #ffffff;
+  --root-border-color: rgba(255, 255, 255, 0.2);
+  --panel-bgcolor: #16213e;
+  --panel-color: #e0e0e0;
+  --panel-border-color: #333;
+  --selected: #4dc4ff;
+  background-color: var(--bgcolor);
+}
+.mind-elixir-inner.dark-theme {
+  background: #1a1a2e;
+}

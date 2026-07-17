@@ -259,3 +259,10 @@ pub fn log_event(entry: crate::dev_logger::LogEntry) -> Result<()> {
 pub fn is_dev_logger_ready() -> bool {
     true
 }
+
+// ===== FreeMind .mm 导入 =====
+#[tauri::command]
+pub fn import_freemind_file(path: String) -> Result<crate::models::Content> {
+    let s = std::fs::read_to_string(&path)?;
+    crate::freemind::import_freemind(&s)
+}
