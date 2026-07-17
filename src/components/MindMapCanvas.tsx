@@ -148,6 +148,9 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     let onDragStart: ((e: MouseEvent) => void) | null = null;
     let onDragMove: ((e: MouseEvent) => void) | null = null;
     let onDragEnd: ((e: MouseEvent) => void) | null = null;
+    let onContextMenu: ((e: MouseEvent) => void) | null = null;
+    let onDocClickCloseMenu: ((e: MouseEvent) => void) | null = null;
+    let contextMenuCleanup: (() => void) | null = null;
 
     if (inner) {
       inner.setAttribute("tabindex", "0");
@@ -479,6 +482,118 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("mousedown", onDragStart);
       document.addEventListener("mousemove", onDragMove);
       document.addEventListener("mouseup", onDragEnd);
+
+      // === 右键上下文菜单 ===
+      let contextMenuEl: HTMLDivElement | null = null;
+
+      const removeContextMenu = () => {
+        if (contextMenuEl) {
+          contextMenuEl.remove();
+          contextMenuEl = null;
+        }
+      };
+
+      onContextMenu = (e: MouseEvent) => {
+        const tpc = getMeTpc(e.target);
+        if (!tpc) return; // 没点节点，让浏览器默认菜单
+        e.preventDefault();
+
+        const inst = instanceRef.current;
+        if (!inst) return;
+        removeContextMenu();
+
+        // 先选中
+        try { inst.selectNode(tpc); } catch {}
+        const nodeId = (tpc as any).nodeObj?.id;
+        if (nodeId) setSelectedNodeId(nodeId);
+
+        const isRoot = !!tpc.closest("me-root");
+
+        const menu = document.createElement("div");
+        menu.className = "ctx-menu";
+
+        const addDivider = () => {
+          const d = document.createElement("div");
+          d.className = "ctx-menu-divider";
+          menu.appendChild(d);
+        };
+
+        type MenuItem = { label: string; disabled?: boolean; action: () => void };
+        const addItem = (item: MenuItem) => {
+          const btn = document.createElement("div");
+          btn.className = "ctx-menu-item" + (item.disabled ? " ctx-disabled" : "");
+          btn.textContent = item.label;
+          if (!item.disabled) {
+            btn.addEventListener("click", () => {
+              try { item.action(); } catch (err) { console.error("[ctx-menu]", err); }
+              removeContextMenu();
+            });
+          }
+          menu.appendChild(btn);
+        };
+
+        addItem({
+          label: "📝 添加子节点",
+          action: async () => {
+            await inst.addChild(tpc);
+            setTimeout(() => {
+              const ib = document.querySelector("#input-box") as HTMLElement | null;
+              if (ib) ib.blur();
+              const mc = document.querySelector(".map-container") as HTMLElement | null;
+              if (mc) mc.focus();
+              syncFromMindElixir();
+            }, 50);
+          },
+        });
+        addItem({
+          label: "➕ 添加兄弟节点",
+          disabled: isRoot,
+          action: async () => {
+            if (isRoot) return;
+            await inst.insertSibling("after", tpc);
+            setTimeout(() => {
+              const ib = document.querySelector("#input-box") as HTMLElement | null;
+              if (ib) ib.blur();
+              const mc = document.querySelector(".map-container") as HTMLElement | null;
+              if (mc) mc.focus();
+              syncFromMindElixir();
+            }, 50);
+          },
+        });
+        addItem({
+          label: "✏️ 编辑节点 (F2)",
+          action: () => inst.beginEdit(tpc),
+        });
+        addDivider();
+        addItem({
+          label: "🗑 删除节点",
+          disabled: isRoot,
+          action: () => {
+            if (isRoot) return;
+            inst.removeNodes([tpc]);
+            setTimeout(() => { syncFromMindElixir(); }, 200);
+          },
+        });
+
+        // 定位（防止超出视口）
+        const x = Math.min(e.clientX, window.innerWidth - 200);
+        const y = Math.min(e.clientY, window.innerHeight - 200);
+        menu.style.left = x + "px";
+        menu.style.top = y + "px";
+        document.body.appendChild(menu);
+        contextMenuEl = menu;
+      };
+
+      // 点击其他地方关闭菜单
+      onDocClickCloseMenu = (e: MouseEvent) => {
+        if (contextMenuEl && !contextMenuEl.contains(e.target as Node)) {
+          removeContextMenu();
+        }
+      };
+
+      inner.addEventListener("contextmenu", onContextMenu);
+      document.addEventListener("click", onDocClickCloseMenu);
+      contextMenuCleanup = removeContextMenu;
     }
 
     return () => {
@@ -486,10 +601,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (onFallbackClick) inner.removeEventListener("click", onFallbackClick);
         if (onFallbackDblClick) inner.removeEventListener("dblclick", onFallbackDblClick);
         if (onDragStart) inner.removeEventListener("mousedown", onDragStart);
+        if (onContextMenu) inner.removeEventListener("contextmenu", onContextMenu);
       }
       if (onFallbackKey) document.removeEventListener("keydown", onFallbackKey);
       if (onDragMove) document.removeEventListener("mousemove", onDragMove);
       if (onDragEnd) document.removeEventListener("mouseup", onDragEnd);
+      if (onDocClickCloseMenu) document.removeEventListener("click", onDocClickCloseMenu);
+      if (contextMenuCleanup) contextMenuCleanup();
       try {
         mind.destroy();
       } catch (e) {

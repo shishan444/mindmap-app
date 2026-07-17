@@ -77,3 +77,37 @@
   outline: 2px dashed #4dc4ff !important;
   outline-offset: 4px;
 }
+
+/* 右键上下文菜单 */
+.ctx-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 180px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  font-size: 13px;
+  user-select: none;
+}
+.ctx-menu-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  color: #333;
+}
+.ctx-menu-item:hover {
+  background: #f0f7ff;
+}
+.ctx-menu-item.ctx-disabled {
+  color: #bbb;
+  cursor: default;
+}
+.ctx-menu-item.ctx-disabled:hover {
+  background: none;
+}
+.ctx-menu-divider {
+  height: 1px;
+  background: #eee;
+  margin: 4px 0;
+}
