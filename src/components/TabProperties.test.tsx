@@ -12,9 +12,9 @@ beforeEach(() => {
 });
 
 describe("FE-PROP: 空状态", () => {
-  it("FE-PROP-01a: 无 content 时显示 '未打开文档'", () => {
+  it("FE-PROP-01a: 无 content 时显示 '未选中节点'", () => {
     render(<TabProperties />);
-    expect(screen.getByText("未打开文档")).toBeInTheDocument();
+    expect(screen.getByText("未选中节点")).toBeInTheDocument();
   });
 
   it("FE-PROP-01b: 有 content 但未选中节点时显示 '未选中节点'", () => {
