@@ -252,9 +252,22 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!inst) return;
 
         // 画布内的这些键始终拦截（防止焦点跳走）
-        const interceptKeys = ["Tab", "Enter", "F2", "Delete", "Backspace"];
+        // Cmd+F 搜索
+        if (e.metaKey && e.key === "f") {
+          e.preventDefault();
+          const si = document.querySelector("#search-input") as HTMLElement | null;
+          if (si) si.focus();
+          return;
+        }
+
+        const interceptKeys = ["Tab", "Enter", "F2", "Delete", "Backspace", "."];
         if (!interceptKeys.includes(e.key)) return;
-        e.preventDefault();  // 关键：先拦截，避免 Tab 跳侧边栏
+        e.preventDefault();
+
+        const selected = getSelected();
+        if (!selected) return;
+
+        const isRoot = selected.tagName === "ME-ROOT";
 
         const selected = getSelected();
         if (!selected) return;  // 没选中就不做操作（但 Tab 已拦截）
@@ -294,6 +307,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             case "Backspace":
               if (!isRoot) {
                 inst.removeNodes(inst.currentNodes || [selected]);
+                opChanged = true;
+              }
+              break;
+            case ".":
+              if (e.metaKey && inst.expandNode) {
+                inst.expandNode(selected);
                 opChanged = true;
               }
               break;

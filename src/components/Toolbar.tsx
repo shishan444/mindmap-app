@@ -9,12 +9,18 @@ interface Props {
   onOpen: () => void;
   onSave: () => void;
   onExportPng: () => void;
+  onExportSvg: () => void;
   onExportMarkdown: () => void;
   onExportOpml: () => void;
   onImportMarkdown: () => void;
   onImportOpml: () => void;
   onSetPriority: (p: Priority) => void;
   onOpenPreferences: () => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  onSearchNext: () => void;
+  searchResultCount: number;
+  searchCurrentIndex: number;
 }
 
 export default function Toolbar({
@@ -22,12 +28,18 @@ export default function Toolbar({
   onOpen,
   onSave,
   onExportPng,
+  onExportSvg,
   onExportMarkdown,
   onExportOpml,
   onImportMarkdown,
   onImportOpml,
   onSetPriority,
   onOpenPreferences,
+  searchQuery,
+  onSearchChange,
+  onSearchNext,
+  searchResultCount,
+  searchCurrentIndex,
 }: Props) {
   const dirty = useMindMapStore((s) => s.dirty);
   const content = useMindMapStore((s) => s.content);
@@ -115,6 +127,9 @@ export default function Toolbar({
             <button className="dropdown-item" onClick={onExportPng}>
               📷 PNG 图片
             </button>
+            <button className="dropdown-item" onClick={onExportSvg}>
+              📐 SVG 矢量
+            </button>
             <button className="dropdown-item" onClick={onExportMarkdown}>
               📝 Markdown (.md)
             </button>
@@ -141,14 +156,34 @@ export default function Toolbar({
       <div className="toolbar-spacer" />
 
       <div className="toolbar-group">
-        <span className="tb-shortcut-hint">Tab=子节点 · Enter=兄弟 · F2=编辑</span>
-        <button
-          className="tb-btn"
-          onClick={onOpenPreferences}
-          title="偏好设置"
-        >
-          ⚙
-        </button>
+        <input
+          id="search-input"
+          type="text"
+          placeholder="搜索... (Cmd+F)"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSearchNext();
+            if (e.key === "Escape") {
+              onSearchChange("");
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          style={{
+            width: 160, padding: "3px 8px", fontSize: 12,
+            border: "1px solid #d1d1d1", borderRadius: 4, outline: "none",
+          }}
+        />
+        {searchResultCount > 0 && (
+          <span style={{ fontSize: 11, color: "#888", minWidth: 30 }}>
+            {searchCurrentIndex + 1}/{searchResultCount}
+          </span>
+        )}
+      </div>
+
+      <div className="toolbar-group">
+        <span className="tb-shortcut-hint">Tab=子 · Enter=兄 · F2=编辑 · Cmd+.=折叠</span>
+        <button className="tb-btn" onClick={onOpenPreferences} title="偏好设置">⚙</button>
       </div>
     </div>
   );

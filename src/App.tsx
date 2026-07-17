@@ -25,6 +25,9 @@ initDevLogger();
 
 function App() {
   const [booted, setBooted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResultIds, setSearchResultIds] = useState<string[]>([]);
+  const [searchIndex, setSearchIndex] = useState(0);
   const setContent = useMindMapStore((s) => s.setContent);
   const setFilePath = useMindMapStore((s) => s.setFilePath);
   const setConfig = useMindMapStore((s) => s.setConfig);
@@ -194,6 +197,83 @@ function App() {
     state.setPriorityForSelected(next);
   };
 
+  // === 搜索 ===
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    if (!q.trim()) {
+      setSearchResultIds([]);
+      setSearchIndex(0);
+      return;
+    }
+    const lower = q.toLowerCase();
+    const results: string[] = [];
+    const walk = (node: any) => {
+      if (node.topic?.toLowerCase().includes(lower)) {
+        results.push(node.id);
+      }
+      for (const c of node.children || []) walk(c);
+    };
+    const content = useMindMapStore.getState().content;
+    if (content) walk(content.root);
+    setSearchResultIds(results);
+    setSearchIndex(0);
+    // 跳到第一个匹配
+    if (results.length > 0) {
+      const mind = useMindMapStore.getState().mindInstance;
+      if (mind?.findEle) {
+        try {
+          const tpc = mind.findEle(results[0]);
+          if (tpc) {
+            mind.selectNode(tpc);
+            if (mind.scrollIntoView) mind.scrollIntoView(tpc);
+          }
+        } catch {}
+      }
+    }
+  };
+
+  const handleSearchNext = () => {
+    if (searchResultIds.length === 0) return;
+    const next = (searchIndex + 1) % searchResultIds.length;
+    setSearchIndex(next);
+    const mind = useMindMapStore.getState().mindInstance;
+    if (mind?.findEle) {
+      try {
+        const tpc = mind.findEle(searchResultIds[next]);
+        if (tpc) {
+          mind.selectNode(tpc);
+          if (mind.scrollIntoView) mind.scrollIntoView(tpc);
+        }
+      } catch {}
+    }
+  };
+
+  // === SVG 导出 ===
+  const handleExportSvg = async () => {
+    try {
+      const mind = mindInstanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!mind?.exportSvg || !state.content) {
+        alert("无法导出 SVG");
+        return;
+      }
+      const blob = mind.exportSvg();
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(arrayBuffer));
+      const filePath = await saveDialog({
+        defaultPath: `${state.content.root.topic || "思维导图"}.svg`,
+        filters: [{ name: "SVG", extensions: ["svg"] }],
+      });
+      if (!filePath) return;
+      await invoke("save_bytes", { path: filePath, data: bytes });
+      const dir = filePath.split("/").slice(0, -1).join("/");
+      await invoke("update_last_dirs", { openDir: null, exportDir: dir, importDir: null });
+    } catch (e) {
+      console.error("[App] SVG 导出失败", e);
+      alert("SVG 导出失败: " + e);
+    }
+  };
+
   const handleExportPng = async () => {
     try {
       const result = await exportPng(mindInstanceRef.current);
@@ -336,12 +416,18 @@ function App() {
         onOpen={handleOpen}
         onSave={handleSave}
         onExportPng={handleExportPng}
+        onExportSvg={handleExportSvg}
         onExportMarkdown={handleExportMarkdown}
         onExportOpml={handleExportOpml}
         onImportMarkdown={handleImportMarkdown}
         onImportOpml={handleImportOpml}
         onSetPriority={handleSetPriority}
         onOpenPreferences={() => useMindMapStore.getState().openPreferences()}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        onSearchNext={handleSearchNext}
+        searchResultCount={searchResultIds.length}
+        searchCurrentIndex={searchIndex}
       />
       <div className="app-main">
         <MindMapCanvas
