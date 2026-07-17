@@ -153,7 +153,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
 
       const getMeTpc = (target: EventTarget | null): HTMLElement | null => {
         if (!(target instanceof HTMLElement)) return null;
-        return target.closest("me-tpc") as HTMLElement | null;
+        // 直接匹配 me-tpc
+        const direct = target.closest("me-tpc");
+        if (direct) return direct as HTMLElement;
+        // me-parent 包裹 me-tpc（mind-elixir 子节点的结构）
+        // 用户点 padding 区域时 target=me-parent，需要向下找 me-tpc
+        const parent = target.closest("me-parent");
+        if (parent) return parent.querySelector("me-tpc") as HTMLElement;
+        // me-root（根节点 wrapper）同理
+        const root = target.closest("me-root");
+        if (root) return root.querySelector("me-tpc") as HTMLElement;
+        return null;
       };
 
       const getSelected = (): any | null => {
