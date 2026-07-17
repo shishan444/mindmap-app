@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import MindElixir from "mind-elixir";
 // MindElixir.css 在 index.html 用 <link> 注入（package.json exports 限制）
+import { logUserAction } from "../utils/devLogger";
 import { useMindMapStore } from "../store";
 import {
   toMindElixirData,
@@ -297,13 +298,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       document.addEventListener("keydown", onFallbackKey);
 
       // === 全局事件诊断（capture 阶段，确保在所有 handler 之前收到） ===
-      // 诊断 WebKit vs Chromium 事件差异
+      // 诊断 WebKit vs Chromium 事件差异，用 logUserAction 写到 JSONL 文件
       document.addEventListener(
         "click",
         (e) => {
           const target = e.target as HTMLElement;
           const tpc = target?.closest?.("me-tpc");
-          console.log("[diag click]", {
+          logUserAction("diag.click", {
             targetTag: target?.tagName,
             targetClass: target?.className?.toString?.()?.substring(0, 40),
             closestMeTpc: !!tpc,
@@ -320,7 +321,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           if (["Tab", "Enter", "F2", "Delete", "Backspace"].includes(e.key)) {
             const t = e.target as HTMLElement;
             const ae = document.activeElement as HTMLElement;
-            console.log("[diag keydown]", {
+            logUserAction("diag.keydown", {
               key: e.key,
               target: t?.tagName,
               activeElement: ae?.tagName,
