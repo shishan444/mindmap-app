@@ -71,3 +71,9 @@
 .mind-elixir-inner .mind-elixir-toolbar {
   display: none !important;
 }
+
+/* 拖动时目标节点高亮 */
+.mind-elixir-inner .drag-over {
+  outline: 2px dashed #4dc4ff !important;
+  outline-offset: 4px;
+}

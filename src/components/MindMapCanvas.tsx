@@ -145,6 +145,9 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     let onFallbackClick: ((e: MouseEvent) => void) | null = null;
     let onFallbackDblClick: ((e: MouseEvent) => void) | null = null;
     let onFallbackKey: ((e: KeyboardEvent) => void) | null = null;
+    let onDragStart: ((e: MouseEvent) => void) | null = null;
+    let onDragMove: ((e: MouseEvent) => void) | null = null;
+    let onDragEnd: ((e: MouseEvent) => void) | null = null;
 
     if (inner) {
       inner.setAttribute("tabindex", "0");
@@ -305,14 +308,123 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("click", onFallbackClick);
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
+
+      // === Fallback 拖动改层级 ===
+      // mind-elixir 5.14 内置 drag 不工作（Nt noop），但 moveNode API 可用。
+      // 自己绑 mousedown/mousemove/mouseup 实现吸附式拖动。
+      let dragState: {
+        source: HTMLElement;
+        startX: number;
+        startY: number;
+        isDragging: boolean;
+      } | null = null;
+
+      const isDescendant = (node: any, targetId: string): boolean => {
+        if (node.id === targetId) return true;
+        const children = node.children ?? [];
+        for (const c of children) {
+          if (isDescendant(c, targetId)) return true;
+        }
+        return false;
+      };
+
+      onDragStart = (e: MouseEvent) => {
+        if (e.button !== 0) return; // 只响应左键
+        const tpc = getMeTpc(e.target);
+        if (!tpc) return;
+        // 根节点不能拖
+        if (tpc.closest("me-root")) return;
+        dragState = {
+          source: tpc,
+          startX: e.clientX,
+          startY: e.clientY,
+          isDragging: false,
+        };
+      };
+
+      onDragMove = (e: MouseEvent) => {
+        if (!dragState) return;
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        if (!dragState.isDragging && Math.sqrt(dx * dx + dy * dy) > 5) {
+          dragState.isDragging = true;
+          inner.style.cursor = "grabbing";
+        }
+        if (!dragState.isDragging) return;
+        // 清除之前的高亮
+        inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        // 检测目标节点
+        const target = getMeTpc(e.target);
+        if (target && target !== dragState.source) {
+          // 不能拖到自己的子孙上
+          const inst = instanceRef.current;
+          const sourceId = (dragState.source as any).nodeObj?.id;
+          const targetId = (target as any).nodeObj?.id;
+          if (inst?.nodeData && sourceId && isDescendant(inst.nodeData, targetId) && isDescendant(
+            (dragState.source as any).nodeObj, targetId
+          )) {
+            return; // 目标是源的子孙，忽略
+          }
+          target.classList.add("drag-over");
+        }
+      };
+
+      onDragEnd = (e: MouseEvent) => {
+        if (!dragState) return;
+        inner.style.cursor = "";
+        inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+
+        if (!dragState.isDragging) {
+          dragState = null;
+          return;
+        }
+
+        const target = getMeTpc(e.target);
+        if (target && target !== dragState.source) {
+          const inst = instanceRef.current;
+          try {
+            // 判断位置：上 25% = before, 下 25% = after, 中间 = in(作为子)
+            const r = target.getBoundingClientRect();
+            const relY = (e.clientY - r.top) / r.height;
+            const sourceTpc = dragState.source;
+
+            // 不能拖到自己的子孙上
+            const sourceNodeObj = (sourceTpc as any).nodeObj;
+            const targetId = (target as any).nodeObj?.id;
+            if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
+              dragState = null;
+              return;
+            }
+
+            if (relY < 0.25) {
+              inst.moveNodeBefore([sourceTpc], target);
+            } else if (relY > 0.75) {
+              inst.moveNodeAfter([sourceTpc], target);
+            } else {
+              inst.moveNodeIn([sourceTpc], target);
+            }
+            setTimeout(() => { syncFromMindElixir(); }, 200);
+          } catch (err) {
+            console.error("[fallback drag] 失败", err);
+          }
+        }
+        dragState = null;
+      };
+
+      inner.addEventListener("mousedown", onDragStart);
+      document.addEventListener("mousemove", onDragMove);
+      document.addEventListener("mouseup", onDragEnd);
     }
 
     return () => {
       if (inner) {
         if (onFallbackClick) inner.removeEventListener("click", onFallbackClick);
         if (onFallbackDblClick) inner.removeEventListener("dblclick", onFallbackDblClick);
+        if (onDragStart) inner.removeEventListener("mousedown", onDragStart);
       }
       if (onFallbackKey) document.removeEventListener("keydown", onFallbackKey);
+      if (onDragMove) document.removeEventListener("mousemove", onDragMove);
+      if (onDragEnd) document.removeEventListener("mouseup", onDragEnd);
       try {
         mind.destroy();
       } catch (e) {
