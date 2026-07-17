@@ -58,13 +58,13 @@
 
 | 信号 | 可能根因 |
 |------|----------|
+| **Chromium 测试通过但 Tauri WebKit 不工作** | **WebKit/Chromium 事件差异（target 不同、pointer-events 不同、焦点不同）。必须用 JSONL 日志看用户真实操作数据** |
 | `Cannot read properties of undefined (reading 'X')` | 数据契约破坏（字段在序列化/传输中丢失）|
-| 用户报告"看起来正常但无法操作" | 焦点被困（input-box / modal 未关闭）|
+| 用户报告"看起来正常但无法操作" | 焦点被困 / target 不匹配（如 me-parent vs me-tpc）|
 | 单元测试全过但生产崩 | mock 重 + 缺契约测试 + 测试数据 ≠ 真实数据 |
-| `dispatchEvent` 测试通过但用户报 bug | 浏览器默认行为差异（contenteditable / form / drag）|
+| `dispatchEvent` 测试通过但用户报 bug | 浏览器默认行为差异（contenteditable / form / drag / 焦点链路）|
 | "Missing specifier in package" | package.json exports 限制，import 路径不在声明内 |
-| 视觉模型说"图标大小不一" | 可能是浮动 UI 重复创建 + CSS layout 异常 |
-| 修了同一类 bug 第 3 次 | 守则缺失，**写新守则**防止第 4 次 |
+| 修了同一类 bug 第 3 次 | **测试环境和真实环境有差异，换方法（JSONL 日志 + 真实事件工具）** |
 | `setState({...}, true)` 后 actions 消失 | replace 模式覆盖了整个 state（zustand）|
 | 集成测试污染真实数据 | env var 重定向（如 `MINDMAP_TEST_DATA_DIR`）没生效 |
 | `npm run xxx` 子进程找不到 cargo | PATH 没继承，脚本内显式 `export PATH=...` |
@@ -133,6 +133,7 @@
 5. **错误必须追到根因**——不只修表象
 6. **默认必须无副作用**——避免反 UX 陷阱
 7. **经验必须沉淀**——同类 bug 出现 2 次就写守则
+8. **Chromium ≠ WebKit**——Tauri 用 WKWebView，事件 target/焦点/pointer-events 和 Chromium 有差异。测试必须用真实 Tauri 环境 + JSONL 日志，不能只靠 Chromium chrome-devtools
 
 ---
 
