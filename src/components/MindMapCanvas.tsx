@@ -295,6 +295,42 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("click", onFallbackClick);
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
+
+      // === 全局事件诊断（capture 阶段，确保在所有 handler 之前收到） ===
+      // 诊断 WebKit vs Chromium 事件差异
+      document.addEventListener(
+        "click",
+        (e) => {
+          const target = e.target as HTMLElement;
+          const tpc = target?.closest?.("me-tpc");
+          console.log("[diag click]", {
+            targetTag: target?.tagName,
+            targetClass: target?.className?.toString?.()?.substring(0, 40),
+            closestMeTpc: !!tpc,
+            closestMeRoot: !!target?.closest?.("me-root"),
+            inInner: !!target?.closest?.(".mind-elixir-inner"),
+            activeElement: document.activeElement?.tagName,
+          });
+        },
+        true,
+      );
+      document.addEventListener(
+        "keydown",
+        (e) => {
+          if (["Tab", "Enter", "F2", "Delete", "Backspace"].includes(e.key)) {
+            const t = e.target as HTMLElement;
+            const ae = document.activeElement as HTMLElement;
+            console.log("[diag keydown]", {
+              key: e.key,
+              target: t?.tagName,
+              activeElement: ae?.tagName,
+              activeClass: ae?.className?.substring(0, 40),
+              inCanvas: !!ae?.closest?.(".map-container"),
+            });
+          }
+        },
+        true,
+      );
     }
 
     return () => {
