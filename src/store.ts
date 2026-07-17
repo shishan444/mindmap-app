@@ -50,6 +50,9 @@ interface MindMapState {
   // mind-elixir 实例引用（不进撤销重做历史）
   mindInstance: any | null;
   setMindInstance: (mind: any | null) => void;
+
+  // 撤销重做后需要 store→mind 反向同步
+  needStoreToMindSync: boolean;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -148,6 +151,7 @@ export const useMindMapStore = create<MindMapState>()(
 
       mindInstance: null,
       setMindInstance: (mind) => set({ mindInstance: mind }),
+      needStoreToMindSync: false,
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）
@@ -169,8 +173,7 @@ export function undo(): boolean {
   const temporal = useMindMapStore.temporal.getState();
   if (temporal.pastStates.length === 0) return false;
   temporal.undo();
-  // 标记 dirty（撤销也算改动）
-  useMindMapStore.setState({ dirty: true });
+  useMindMapStore.setState({ dirty: true, needStoreToMindSync: true });
   return true;
 }
 
@@ -178,7 +181,7 @@ export function redo(): boolean {
   const temporal = useMindMapStore.temporal.getState();
   if (temporal.futureStates.length === 0) return false;
   temporal.redo();
-  useMindMapStore.setState({ dirty: true });
+  useMindMapStore.setState({ dirty: true, needStoreToMindSync: true });
   return true;
 }
 

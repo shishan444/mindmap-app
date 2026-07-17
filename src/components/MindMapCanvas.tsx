@@ -27,6 +27,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
   const markDirty = useMindMapStore((s) => s.markDirty);
   const setMindInstance = useMindMapStore((s) => s.setMindInstance);
   const theme = useMindMapStore((s) => s.config?.ui.theme || "system");
+  const needSync = useMindMapStore((s) => s.needStoreToMindSync);
 
   // 初始化 mind-elixir（仅 mount 一次）
   useEffect(() => {
@@ -727,6 +728,24 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content?.root.id]);
+
+  // store→mind 反向同步：撤销/重做后 needStoreToMindSync=true
+  // 用 store.content 覆盖 mind-elixir 数据（mind.refresh 轻量更新）
+  useEffect(() => {
+    if (!needSync || !instanceRef.current || !content) return;
+    try {
+      const data = toMindElixirData(content);
+      instanceRef.current.refresh(data);
+      // 同步 selectedNodeId
+      const sel = instanceRef.current.currentNodes?.[0];
+      if (sel?.nodeObj?.id) {
+        setSelectedNodeId(sel.nodeObj.id);
+      }
+    } catch (e) {
+      console.error("[store→mind sync] refresh 失败", e);
+    }
+    useMindMapStore.setState({ needStoreToMindSync: false });
+  }, [needSync]);
 
   // 明暗主题：给 .mind-elixir-inner 加/去 dark-theme class
   useEffect(() => {
