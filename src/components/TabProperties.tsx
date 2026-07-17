@@ -39,7 +39,7 @@ export default function TabProperties() {
   const toggleIcon = (emoji: string) => {
     const current = node.icons || [];
     if (current.includes(emoji)) {
-      applyIcons(current.filter((e) => e !== emoji));
+      applyIcons(current.filter((ic: string) => ic !== emoji));
     } else {
       applyIcons([...current, emoji]);
     }

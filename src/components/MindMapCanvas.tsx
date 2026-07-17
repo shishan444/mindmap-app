@@ -284,11 +284,6 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!selected) return;
 
         const isRoot = selected.tagName === "ME-ROOT";
-
-        const selected = getSelected();
-        if (!selected) return;  // 没选中就不做操作（但 Tab 已拦截）
-
-        const isRoot = selected.tagName === "ME-ROOT";
         let opChanged = false;
         try {
           switch (e.key) {
