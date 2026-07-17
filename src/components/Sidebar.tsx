@@ -7,7 +7,7 @@ import TabOutline from "./TabOutline";
 import "./Sidebar.css";
 
 const TABS: { id: SidebarTab; icon: string; label: string }[] = [
-  { id: "properties", icon: "📌", label: "属性" },
+  { id: "properties", icon: "📋", label: "面板" },
   { id: "reminders", icon: "⏰", label: "提醒" },
   { id: "style", icon: "🎨", label: "样式" },
   { id: "outline", icon: "📋", label: "大纲" },

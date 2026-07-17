@@ -12,9 +12,9 @@ beforeEach(() => {
 });
 
 describe("FE-SIDEBAR: tab 切换", () => {
-  it("FE-SIDEBAR-01: 默认 activeTab='properties'，显示属性面板标题", () => {
+  it("FE-SIDEBAR-01: 默认 activeTab='properties'，显示面板面板标题", () => {
     render(<Sidebar />);
-    expect(screen.getByText("属性")).toBeInTheDocument();
+    expect(screen.getByText("面板")).toBeInTheDocument();
   });
 
   it("FE-SIDEBAR-02: 点击 '大纲' tab 后切换", () => {
@@ -39,7 +39,7 @@ describe("FE-SIDEBAR: tab 切换", () => {
     const { container } = render(<Sidebar />);
     const activeTab = container.querySelector(".sidebar-tab.active");
     expect(activeTab).not.toBeNull();
-    expect(activeTab?.textContent).toContain("属性");
+    expect(activeTab?.textContent).toContain("面板");
   });
 });
 
