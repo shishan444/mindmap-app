@@ -78,7 +78,7 @@ export default function TabProperties() {
   const mind = useMindMapStore((s) => s.mindInstance);
   const setPriorityForSelected = useMindMapStore((s) => s.setPriorityForSelected);
   const updateSelectedNode = useMindMapStore((s) => s.updateSelectedNode);
-  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(true);
   const [noteDraft, setNoteDraft] = useState<string>("");
 
   const node = findNode(content?.root ?? null, selectedId);

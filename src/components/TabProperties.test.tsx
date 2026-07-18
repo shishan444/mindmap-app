@@ -82,17 +82,17 @@ describe("FE-PANEL: 图标选择器", () => {
     });
   });
 
-  it("显示选择图标按钮", () => {
+  it("默认展开显示图标分类", () => {
     render(<TabProperties />);
-    expect(screen.getByText(/选择图标/)).toBeInTheDocument();
-  });
-
-  it("展开后显示分类", () => {
-    render(<TabProperties />);
-    fireEvent.click(screen.getByText(/选择图标/));
     expect(screen.getByText("任务进度")).toBeInTheDocument();
     expect(screen.getByText("任务级别")).toBeInTheDocument();
     expect(screen.getByText("任务类型")).toBeInTheDocument();
     expect(screen.getByText("状态标记")).toBeInTheDocument();
+  });
+
+  it("可收起图标选择器", () => {
+    render(<TabProperties />);
+    fireEvent.click(screen.getByText(/收起/));
+    expect(screen.queryByText("任务进度")).not.toBeInTheDocument();
   });
 });

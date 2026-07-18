@@ -131,15 +131,36 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!newContent) return;
         if (state.content && state.content.root === newContent.root) return;
         setContent(newContent);
-        // 关键：同步 selectedNodeId 到 mind-elixir 当前选中节点
-        // 否则 TabProperties 等组件显示的还是旧选中
         const sel = inst.currentNodes?.[0];
         if (sel?.nodeObj?.id) {
           setSelectedNodeId(sel.nodeObj.id);
         }
+        syncPriorityStyles();
       } catch (e) {
         console.error("[mind-elixir sync] 失败", e);
       }
+    }
+
+    // 遍历所有节点，根据 priority 设置画布 DOM 彩色左边框
+    function syncPriorityStyles() {
+      const inst = instanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!inst || !state.content) return;
+      const colors: Record<string, string> = {
+        P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
+      };
+      const walk = (node: any) => {
+        const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        if (tpc) {
+          if (node.priority && colors[node.priority]) {
+            tpc.style.borderLeft = `4px solid ${colors[node.priority]}`;
+          } else {
+            tpc.style.borderLeft = "";
+          }
+        }
+        for (const c of node.children || []) walk(c);
+      };
+      walk(state.content.root);
     }
 
     // === Fallback 事件处理 ===
@@ -745,6 +766,24 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       console.error("[store→mind sync] refresh 失败", e);
     }
     useMindMapStore.setState({ needStoreToMindSync: false });
+    // 撤销/重做后恢复优先级边框
+    setTimeout(() => {
+      const inst = instanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!inst || !state.content) return;
+      const colors: Record<string, string> = {
+        P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
+      };
+      const walk = (node: any) => {
+        const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        if (tpc) {
+          tpc.style.borderLeft = node.priority && colors[node.priority]
+            ? `4px solid ${colors[node.priority]}` : "";
+        }
+        for (const c of node.children || []) walk(c);
+      };
+      walk(state.content.root);
+    }, 100);
   }, [needSync]);
 
   // 明暗主题：给 .mind-elixir-inner 加/去 dark-theme class
