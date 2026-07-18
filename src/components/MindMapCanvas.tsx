@@ -146,16 +146,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const inst = instanceRef.current;
       const state = useMindMapStore.getState();
       if (!inst || !state.content) return;
-      const colors: Record<string, string> = {
-        P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
-      };
       const walk = (node: any) => {
         const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
         if (tpc) {
-          if (node.priority && colors[node.priority]) {
-            tpc.style.borderLeft = `4px solid ${colors[node.priority]}`;
-          } else {
-            tpc.style.borderLeft = "";
+          tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
+          if (node.priority) {
+            tpc.classList.add(`priority-${node.priority.toLowerCase()}`);
           }
         }
         for (const c of node.children || []) walk(c);
@@ -777,8 +773,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const walk = (node: any) => {
         const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
         if (tpc) {
-          tpc.style.borderLeft = node.priority && colors[node.priority]
-            ? `4px solid ${colors[node.priority]}` : "";
+          tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
+          if (node.priority) {
+            tpc.classList.add(`priority-${node.priority.toLowerCase()}`);
+          }
         }
         for (const c of node.children || []) walk(c);
       };

@@ -131,3 +131,52 @@
 .mind-elixir-inner.dark-theme {
   background: #1a1a2e;
 }
+
+/* === 优先级视觉标记：全包围彩色边框 + 边框外左侧图标 === */
+.mind-elixir-inner me-tpc.priority-p0,
+.mind-elixir-inner me-tpc.priority-p1,
+.mind-elixir-inner me-tpc.priority-p2,
+.mind-elixir-inner me-tpc.priority-p3 {
+  border-width: 2px !important;
+  border-style: solid !important;
+}
+
+.mind-elixir-inner me-tpc.priority-p0 { border-color: #e74c3c !important; }
+.mind-elixir-inner me-tpc.priority-p1 { border-color: #f39c12 !important; }
+.mind-elixir-inner me-tpc.priority-p2 { border-color: #3b82f6 !important; }
+.mind-elixir-inner me-tpc.priority-p3 { border-color: #95a5a6 !important; }
+
+/* 边框外左侧图标（::before pseudo-element + SVG data URI） */
+.mind-elixir-inner me-tpc[class*="priority-p"]::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  z-index: 100;
+}
+
+/* P0: Flame 🔥 */
+.mind-elixir-inner me-tpc.priority-p0::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23e74c3c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'/%3E%3C/svg%3E");
+}
+
+/* P1: Zap ⚡ */
+.mind-elixir-inner me-tpc.priority-p1::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23f39c12' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z'/%3E%3C/svg%3E");
+}
+
+/* P2: Circle ● */
+.mind-elixir-inner me-tpc.priority-p2::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%233b82f6' stroke='none'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E");
+}
+
+/* P3: CircleDashed ○ */
+.mind-elixir-inner me-tpc.priority-p3::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2395a5a6' stroke-width='2.5' stroke-dasharray='4 4'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E");
+}

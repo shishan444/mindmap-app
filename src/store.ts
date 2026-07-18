@@ -132,16 +132,16 @@ export const useMindMapStore = create<MindMapState>()(
 
       setPriorityForSelected: (p) => {
         get().updateSelectedNode({ priority: p ?? undefined });
-        // 画布视觉反馈：优先级彩色左边框
+        // 画布视觉反馈：CSS class 控制全包围边框 + 边框外图标
         const inst = get().mindInstance;
         const id = get().selectedNodeId;
         if (inst && id) {
           const tpc = typeof inst.findEle === "function" ? inst.findEle(id) : null;
           if (tpc) {
-            const colors: Record<string, string> = {
-              P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
-            };
-            tpc.style.borderLeft = p && colors[p] ? `4px solid ${colors[p]}` : "";
+            tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
+            if (p) {
+              tpc.classList.add(`priority-${p.toLowerCase()}`);
+            }
           }
         }
       },
