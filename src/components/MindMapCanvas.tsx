@@ -767,9 +767,6 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const inst = instanceRef.current;
       const state = useMindMapStore.getState();
       if (!inst || !state.content) return;
-      const colors: Record<string, string> = {
-        P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
-      };
       const walk = (node: any) => {
         const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
         if (tpc) {
