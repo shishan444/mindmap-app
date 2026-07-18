@@ -84,12 +84,6 @@ describe("FE-ADAPT: nodeToMindElixirNode 扩展字段保留", () => {
     expect(me.priority).toBe("P0");
   });
 
-  it("FE-ADAPT-08: note 字段保留", () => {
-    const node = makeNode({ note: "备注内容" });
-    const me = nodeToMindElixirNode(node);
-    expect(me.note).toBe("备注内容");
-  });
-
   it("FE-ADAPT-09: priority=null 时不输出 priority 字段", () => {
     const node = makeNode({});
     const me = nodeToMindElixirNode(node);
@@ -201,12 +195,10 @@ describe("FE-ADAPT: fromMindElixirNode", () => {
       topic: "T",
       children: [],
       priority: "P1",
-      note: "备注",
       icons: ["🔥"],
     };
     const node = fromMindElixirNode(me);
     expect(node.priority).toBe("P1");
-    expect(node.note).toBe("备注");
     expect(node.icons).toEqual(["🔥"]);
   });
 });
@@ -260,7 +252,6 @@ describe("FE-ADAPT: 往返一致性（round-trip）", () => {
       id: "rt",
       topic: "根",
       priority: "P2",
-      note: "测试",
       collapsed: false,
       children: [
         makeNode({
@@ -277,7 +268,6 @@ describe("FE-ADAPT: 往返一致性（round-trip）", () => {
     expect(restored.id).toBe(original.id);
     expect(restored.topic).toBe(original.topic);
     expect(restored.priority).toBe(original.priority);
-    expect(restored.note).toBe(original.note);
     expect(restored.collapsed).toBe(original.collapsed);
     expect(restored.children.length).toBe(1);
     expect(restored.children[0].collapsed).toBe(true);

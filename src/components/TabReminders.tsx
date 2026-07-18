@@ -8,6 +8,7 @@ export default function TabReminders() {
   const content = useMindMapStore((s) => s.content);
   const selectedId = useMindMapStore((s) => s.selectedNodeId);
   const filePath = useMindMapStore((s) => s.filePath);
+  const setAllReminders = useMindMapStore((s) => s.setAllReminders);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({
@@ -58,8 +59,9 @@ export default function TabReminders() {
       updated_at: new Date().toISOString(),
     };
     try {
-      await invoke("upsert_reminder", { reminder });
-      setReminders((prev) => [...prev.filter((r) => r.id !== reminder.id), reminder]);
+      const idx = await invoke<{ reminders: Reminder[] }>("upsert_reminder", { reminder });
+      setReminders(idx.reminders.filter((r) => r.node_id === selectedId));
+      setAllReminders(idx.reminders); // 同步全局缓存(画布沙漏)
       setAdding(false);
       setDraft({ title: "", trigger_at: defaultTrigger(), repeat: "none" });
     } catch (e) {
@@ -70,8 +72,9 @@ export default function TabReminders() {
   const handleDelete = async (id: string) => {
     if (!confirm("确定删除此提醒？")) return;
     try {
-      await invoke("delete_reminder", { id });
-      setReminders((prev) => prev.filter((r) => r.id !== id));
+      const idx = await invoke<{ reminders: Reminder[] }>("delete_reminder", { id });
+      setReminders(idx.reminders.filter((r) => r.node_id === selectedId));
+      setAllReminders(idx.reminders);
     } catch (e) {
       alert("删除失败: " + e);
     }
@@ -80,10 +83,9 @@ export default function TabReminders() {
   const handleToggle = async (r: Reminder) => {
     const updated = { ...r, enabled: !r.enabled, updated_at: new Date().toISOString() };
     try {
-      await invoke("upsert_reminder", { reminder: updated });
-      setReminders((prev) =>
-        prev.map((x) => (x.id === r.id ? updated : x)),
-      );
+      const idx = await invoke<{ reminders: Reminder[] }>("upsert_reminder", { reminder: updated });
+      setReminders(idx.reminders.filter((x) => x.node_id === selectedId));
+      setAllReminders(idx.reminders);
     } catch (e) {
       alert("切换失败: " + e);
     }

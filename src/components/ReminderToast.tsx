@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { useMindMapStore } from "../store";
 import type { Reminder } from "../types";
 import "./ReminderToast.css";
 
@@ -38,6 +40,33 @@ export default function ReminderToast() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // 点击 Toast 跳转到对应节点(仅当前文件;跨文件不处理)
+  const jumpToNode = async (reminder: Reminder) => {
+    const filePath = useMindMapStore.getState().filePath;
+    if (!filePath || filePath !== reminder.source_file) {
+      // 不跨文件 — 静默忽略
+      return;
+    }
+    const mind = useMindMapStore.getState().mindInstance;
+    if (!mind) return;
+    // node_id 在 DOM 上有 "me" 前缀(mind-elixir 内部)
+    const tpc =
+      (typeof mind.findEle === "function" && mind.findEle(reminder.node_id)) || null;
+    if (!tpc) return;
+    try {
+      if (mind.selectNode) mind.selectNode(tpc);
+      if (mind.focusNode) mind.focusNode(tpc);
+      else if (mind.scrollIntoView) mind.scrollIntoView(tpc);
+    } catch (e) {
+      console.error("[ReminderToast] 跳转失败", e);
+    }
+    // 触发跳转后,刷新 reminders 缓存(可能用户已读)
+    try {
+      const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
+      useMindMapStore.getState().setAllReminders(idx.reminders || []);
+    } catch {}
+  };
+
   // 自动 8 秒后消失
   useEffect(() => {
     if (toasts.length === 0) return;
@@ -57,7 +86,10 @@ export default function ReminderToast() {
           key={t.id}
           className="reminder-toast"
           role="alert"
-          onClick={() => dismiss(t.id)}
+          onClick={() => {
+            jumpToNode(t.reminder);
+            dismiss(t.id);
+          }}
         >
           <div className="reminder-toast-icon">⏰</div>
           <div className="reminder-toast-body">

@@ -23,7 +23,6 @@ export interface NodeStyle {
 export interface MindNode {
   id: string;
   topic: string;
-  note?: string;
   priority?: Priority;
   image?: NodeImage;
   icons?: string[];           // 后端总是输出 []，但前端防御性处理 undefined
@@ -31,6 +30,26 @@ export interface MindNode {
   style?: NodeStyle;
   collapsed?: boolean;
   children?: MindNode[];      // 历史数据可能缺失，所有访问用 ?? [] 防御
+  attached_file?: AttachedFile;  // 附加文件(Package 目录机制)
+}
+
+export type FileType =
+  | "image"
+  | "pdf"
+  | "slide"
+  | "doc"
+  | "sheet"
+  | "video"
+  | "audio"
+  | "other";
+
+export interface AttachedFile {
+  uuid: string;
+  original_name: string;
+  ext: string;
+  file_type: FileType;
+  size_bytes: number;
+  attached_at: string;
 }
 
 export interface CanvasState {
@@ -72,6 +91,7 @@ export interface ReminderPrefs {
   default_priority: string;
   snooze_minutes: number;
   show_modal_when_background: boolean;
+  system_notification_enabled: boolean;
 }
 
 export interface ExportPrefs {

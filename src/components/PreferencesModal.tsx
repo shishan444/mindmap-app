@@ -32,6 +32,16 @@ export default function PreferencesModal() {
     }
   }, [show, config]);
 
+  // Esc 关闭(满足 escape-routes:模态必须提供取消/退出途径)
+  useEffect(() => {
+    if (!show) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [show, close]);
+
   if (!show || !draft) return null;
 
   const update = (path: (cfg: Config) => void) => {
@@ -255,6 +265,19 @@ function ReminderTab({ draft, update }: TabProps) {
           }
         />
         <span>软件在后台时也弹应用内模态框</span>
+      </label>
+
+      <label className="prefs-field checkbox">
+        <input
+          type="checkbox"
+          checked={draft.reminder.system_notification_enabled}
+          onChange={(e) =>
+            update((c) => {
+              c.reminder.system_notification_enabled = e.target.checked;
+            })
+          }
+        />
+        <span>触发 macOS 系统通知（通知中心）</span>
       </label>
     </div>
   );

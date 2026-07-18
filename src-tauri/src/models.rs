@@ -47,8 +47,6 @@ pub struct Node {
     pub id: String,
     pub topic: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<NodeImage>,
@@ -64,6 +62,70 @@ pub struct Node {
     pub collapsed: bool,
     #[serde(default)]
     pub children: Vec<Node>,
+    /// 附加文件(Package 目录机制:文件存在 assets/{uuid}.{ext})
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attached_file: Option<AttachedFile>,
+}
+
+/// 附加文件元信息。文件实体存在 .mmap 目录内的 assets/{uuid}.{ext}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachedFile {
+    /// 内部唯一 ID(用于索引 assets/ 和 thumbnails/)
+    pub uuid: String,
+    /// 原始文件名(含扩展名,显示用)
+    pub original_name: String,
+    /// 扩展名(小写无点,如 "pdf" / "pptx" / "mp4")
+    pub ext: String,
+    /// 文件类型枚举(决定缩略图策略 + 图标渲染)
+    pub file_type: FileType,
+    /// 文件大小(字节)
+    pub size_bytes: u64,
+    /// 附加时间(ISO 8601 UTC)
+    pub attached_at: String,
+}
+
+/// 文件类型枚举 — 决定画布渲染策略
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileType {
+    /// 图片(jpg/png/gif/webp)— 缩略图就是图片本身
+    Image,
+    /// PDF — 用 QL 生成第一页缩略图
+    Pdf,
+    /// 演示文稿(ppt/pptx/key)— QL 缩略图
+    Slide,
+    /// 文档(doc/docx/pages)— QL 缩略图
+    Doc,
+    /// 表格(xls/xlsx/numbers)— QL 缩略图
+    Sheet,
+    /// 视频(mp4/mov/m4v)— 不生成缩略图,显示图标
+    Video,
+    /// 音频(mp3/wav/m4a)— 不生成缩略图,显示图标
+    Audio,
+    /// 其他类型 — 通用文件图标
+    Other,
+}
+
+impl FileType {
+    /// 根据扩展名推断文件类型
+    pub fn from_extension(ext: &str) -> Self {
+        let e = ext.to_lowercase();
+        match e.as_str() {
+            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tiff" | "svg" => Self::Image,
+            "pdf" => Self::Pdf,
+            "ppt" | "pptx" | "key" => Self::Slide,
+            "doc" | "docx" | "pages" | "rtf" | "txt" | "md" => Self::Doc,
+            "xls" | "xlsx" | "numbers" | "csv" => Self::Sheet,
+            "mp4" | "mov" | "m4v" | "avi" | "mkv" | "webm" => Self::Video,
+            "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg" => Self::Audio,
+            _ => Self::Other,
+        }
+    }
+
+    /// 是否需要生成缩略图
+    pub fn needs_thumbnail(&self) -> bool {
+        matches!(self, Self::Image | Self::Pdf | Self::Slide | Self::Doc | Self::Sheet)
+    }
 }
 
 impl Node {
@@ -71,7 +133,6 @@ impl Node {
         Self {
             id: Uuid::new_v4().to_string(),
             topic: topic.into(),
-            note: None,
             priority: None,
             image: None,
             icons: vec![],
@@ -79,6 +140,7 @@ impl Node {
             style: NodeStyle::default(),
             collapsed: false,
             children: vec![],
+            attached_file: None,
         }
     }
 }
@@ -264,6 +326,9 @@ pub struct ReminderPrefs {
     pub snooze_minutes: u32,
     #[serde(default)]
     pub show_modal_when_background: bool,
+    /// 系统通知（macOS 通知中心）。默认开启，用户可在偏好设置中关闭。
+    #[serde(default = "default_true")]
+    pub system_notification_enabled: bool,
 }
 
 fn default_sound_file() -> String {
@@ -284,6 +349,7 @@ impl Default for ReminderPrefs {
             default_priority: default_priority_str(),
             snooze_minutes: default_snooze(),
             show_modal_when_background: false,
+            system_notification_enabled: true,
         }
     }
 }
@@ -624,7 +690,6 @@ mod tests {
             json
         );
         // Option 字段为 None 时仍跳过（不影响）
-        assert!(!json.contains("\"note\""));
         assert!(!json.contains("\"priority\""));
     }
 
@@ -635,7 +700,6 @@ mod tests {
         let n: Node = serde_json::from_str(json).unwrap();
         assert_eq!(n.id, "abc");
         assert_eq!(n.topic, "老节点");
-        assert!(n.note.is_none());
         assert!(n.priority.is_none());
         assert!(n.children.is_empty());
         assert!(!n.collapsed);
@@ -801,5 +865,90 @@ mod tests {
         // max=1，应该只保留 1 个 pinned（A）
         let pinned_paths: Vec<_> = rf.files.iter().filter(|f| f.pinned).map(|f| f.path.clone()).collect();
         assert!(pinned_paths.contains(&"/a.mmap".to_string()));
+    }
+
+    #[test]
+    fn file_type_from_extension_image() {
+        assert!(matches!(FileType::from_extension("jpg"), FileType::Image));
+        assert!(matches!(FileType::from_extension("PNG"), FileType::Image));
+        assert!(matches!(FileType::from_extension("gif"), FileType::Image));
+    }
+
+    #[test]
+    fn file_type_from_extension_pdf_doc_sheet() {
+        assert!(matches!(FileType::from_extension("pdf"), FileType::Pdf));
+        assert!(matches!(FileType::from_extension("pptx"), FileType::Slide));
+        assert!(matches!(FileType::from_extension("docx"), FileType::Doc));
+        assert!(matches!(FileType::from_extension("xlsx"), FileType::Sheet));
+    }
+
+    #[test]
+    fn file_type_from_extension_media() {
+        assert!(matches!(FileType::from_extension("mp4"), FileType::Video));
+        assert!(matches!(FileType::from_extension("mov"), FileType::Video));
+        assert!(matches!(FileType::from_extension("mp3"), FileType::Audio));
+        assert!(matches!(FileType::from_extension("flac"), FileType::Audio));
+    }
+
+    #[test]
+    fn file_type_from_extension_other() {
+        assert!(matches!(FileType::from_extension("zip"), FileType::Other));
+        assert!(matches!(FileType::from_extension("unknown"), FileType::Other));
+    }
+
+    #[test]
+    fn file_type_needs_thumbnail() {
+        assert!(FileType::Image.needs_thumbnail());
+        assert!(FileType::Pdf.needs_thumbnail());
+        assert!(FileType::Slide.needs_thumbnail());
+        assert!(FileType::Doc.needs_thumbnail());
+        assert!(FileType::Sheet.needs_thumbnail());
+        assert!(!FileType::Video.needs_thumbnail());
+        assert!(!FileType::Audio.needs_thumbnail());
+        assert!(!FileType::Other.needs_thumbnail());
+    }
+
+    #[test]
+    fn attached_file_serialization() {
+        let af = AttachedFile {
+            uuid: "test-uuid".to_string(),
+            original_name: "report.pdf".to_string(),
+            ext: "pdf".to_string(),
+            file_type: FileType::Pdf,
+            size_bytes: 1024,
+            attached_at: "2026-07-18T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&af).unwrap();
+        assert!(json.contains("\"file_type\":\"pdf\""));
+        let de: AttachedFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.uuid, "test-uuid");
+        assert!(matches!(de.file_type, FileType::Pdf));
+    }
+
+    #[test]
+    fn node_with_attached_file_serialization() {
+        let mut n = Node::new("文件节点");
+        n.attached_file = Some(AttachedFile {
+            uuid: "u1".to_string(),
+            original_name: "demo.mp4".to_string(),
+            ext: "mp4".to_string(),
+            file_type: FileType::Video,
+            size_bytes: 1024 * 1024,
+            attached_at: "2026-07-18T00:00:00Z".to_string(),
+        });
+        let json = serde_json::to_string(&n).unwrap();
+        assert!(json.contains("\"attached_file\""));
+        assert!(json.contains("\"file_type\":\"video\""));
+        // 反序列化
+        let de: Node = serde_json::from_str(&json).unwrap();
+        assert!(de.attached_file.is_some());
+    }
+
+    #[test]
+    fn node_without_attached_file_no_field() {
+        // 没有 attached_file 时,序列化结果不应该包含该字段(skip_serializing_if)
+        let n = Node::new("普通节点");
+        let json = serde_json::to_string(&n).unwrap();
+        assert!(!json.contains("attached_file"), "无附件不应序列化该字段");
     }
 }

@@ -34,11 +34,16 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 
 | 功能 | 状态 |
 |------|------|
-| .mmap 文件格式（zip + json + 原子写入 + 单份备份） | ✅ |
+| .mmap 目录机制(Package 目录 + meta/content/assets/thumbnails + 原子写 + 单份备份) | ✅ |
 | 新建/打开/保存/另存为 + 最近文件（含置顶） | ✅ |
 | 自动保存（防抖 2s） | ✅ |
 | 启动恢复上次状态（窗口位置/大小/侧栏 tab） | ✅ |
 | 单例检测（重复打开激活已有窗口） | ✅ |
+| 附加文件(7 类型:图片/PDF/PPT/Word/Excel/视频/音频) | ✅ |
+| 缩略图差异化(图片/PDF/Office 用 qlmanage;视频/音频用图标) | ✅ |
+| 双击节点调用系统工具打开附件 | ✅ |
+| 右键附件菜单(打开/Finder 显示/替换/移除) | ✅ |
+| 不向后兼容旧 .mmap 单文件(zip 格式) | ✅ |
 
 ### 导入导出
 
@@ -54,10 +59,12 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 
 | 功能 | 状态 |
 |------|------|
-| 属性面板（主题/ID/优先级/备注/图标） | ✅ |
+| 面板（优先级 + 图标，可操作） | ✅ |
 | TabStyle 样式编辑（字号/颜色/粗体/下划线/边框/宽度） | ✅ |
 | 大纲视图（单击跳转 + 双击编辑） | ✅ |
-| 提醒 CRUD + 重复规则 + 调度器 + Toast | ✅ |
+| 提醒 CRUD + 重复规则 + 调度器 + Toast + 系统通知 | ✅ |
+| 沙漏状态标识（自定义 SVG 图形 + 状态色 + reduced-motion） | ✅ |
+| Toast 点击跳转节点（同文件内） | ✅ |
 | emoji 图标库（4 分类选择器） | ✅ |
 
 ### 系统能力
@@ -69,6 +76,7 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 | 明暗主题（CSS 变量覆盖） | ✅ |
 | 开发模式 JSONL 操作日志 | ✅ |
 | 启动预检自动清理僵尸进程 | ✅ |
+| macOS 系统通知（tauri-plugin-notification + 偏好开关） | ✅ |
 
 ### 工程化
 
@@ -88,7 +96,6 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 | 大型图虚拟滚动（1000+ 节点） | 需改 mind-elixir 渲染层 |
 | 小地图 minimap | 需自己画 SVG 缩略图 |
 | 节点关联线（非父子箭头） | mind-elixir createArrow 在 5.14 可能不工作 |
-| macOS 系统通知 | 需装 tauri-plugin-notification |
 
 ---
 
@@ -103,16 +110,26 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 | addChild 后 Tab 失效 | blur input-box 焦点丢到 body | blur 后 focus map-container |
 | 拖动子树脱离 | WebKit mouseup e.target 不对 | elementFromPoint 替代 |
 | 撤销不生效 | store→mind 反向同步缺失 | needStoreToMindSync + mind.refresh |
+| 切换节点后 priority 视觉标记丢失 | 1. store 扩展字段未同步到 mind nodeObj；2. mind-elixir selectNode 内部用 `className=` 直接覆盖（不是 classList.add），priority-p0 class 被 "selected" 替换掉 | 1. `updateSelectedNode` 调用 `syncToMindNodeObj` 把 priority/note/reminder_ids/style 同步到 nodeObj；2. MindMapCanvas 在 init 后 hook `mind.selectNode`，调用前快照 priority class，调用后恢复 |
 
 ---
 
 ## 测试矩阵
 
 ```
-✓ 前端单元（vitest）        232
-✓ Rust 单元（cargo test）    84
+✓ 前端单元（vitest）        238
+✓ Rust 单元（cargo test）    88
 ✓ Rust 集成                  17
-✓ E2E 真实事件               38
+✓ TypeScript 类型检查       0 错误
+✓ E2E 真实 CDP 事件 + Tauri mock 注入   46
 ─────────────────────────────────
-✓ 合计                      371
+✓ 合计                      389
 ```
+
+### E2E 验证方式
+
+- **CDP 协议直连**：Chrome headless + `--remote-debugging-port=9333`
+- **Tauri mock**：通过 `Page.addScriptToEvaluateOnNewDocument` 在页面加载前注入 `window.__TAURI_INTERNALS__.invoke`，模拟 new_mmap / save_mmap / get_config 等 20+ 命令
+- **真实事件**：`Input.dispatchKeyEvent` (rawKeyDown/keyUp) + `Input.dispatchMouseEvent` + `Input.insertText`
+- **场景覆盖**：启动渲染 / Tab 多级创建 / F2 编辑 / 优先级 P0 视觉标记（CSS class + ::before SVG）/ 撤销重做 / Enter 兄弟节点 / Tab 切换 / 搜索 / 偏好设置（含 Esc 关闭）/ Delete 删除
+- **样式验证**：`window.getComputedStyle(el, "::before")` 直接读取伪元素 border / left / width / background-image

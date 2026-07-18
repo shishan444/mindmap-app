@@ -7,10 +7,11 @@
 
 | 层级 | 工具 | 状态 |
 |------|------|------|
-| 单元（前端） | vitest + @testing-library | 232 通过 |
-| 单元（Rust） | cargo test | 84 通过 |
+| 单元（前端） | vitest + @testing-library | 238 通过 |
+| 单元（Rust） | cargo test | 88 通过 |
 | 集成（Rust） | cargo test --test integration | 17 通过 |
-| E2E（Chromium） | chrome-devtools click/press_key/type_text | 38 场景通过 |
+| 类型检查 | tsc --noEmit | ✅ 0 错误 |
+| E2E（Chromium） | CDP + Tauri mock 注入 | 46 场景通过 |
 | WebKit（Tauri） | 用户验证 | ✅ 核心路径 |
 
 ---
@@ -57,11 +58,14 @@
 | 功能 | 单元 | 集成 | E2E | 状态 |
 |------|------|------|-----|------|
 | Tab 切换（4 个） | ✅ Sidebar | — | ✅ G1-G6 | ✅ |
-| 属性面板（主题/ID/优先级/备注/图标） | ✅ TabProperties | — | ✅ G3 | ✅ |
+| 属性面板（主题/ID/优先级/图标） | ✅ TabProperties | — | ✅ G3 | ✅ |
 | 样式编辑（字号/颜色/粗体/边框） | — | — | ✅ G4 | ✅ |
 | 大纲跳转 + 编辑 | ✅ TabOutline | — | ✅ G5 | ✅ |
 | 提醒 CRUD + 重复规则 | ✅ TabReminders | — | ✅ G6 | ✅ |
-| emoji 图标库 | ✅ TabProperties | — | ✅ | ✅ |
+| SVG 图标库（4 分类：任务进度/级别/类型/状态） | ✅ TabProperties | — | ✅ D-按钮 | ✅ |
+| 优先级视觉标记（全包围边框 + 外侧 SVG 图标） | ✅ store CSS class | — | ✅ D-边框/D-图标 | ✅ |
+| macOS 系统通知（tauri-plugin-notification） | ✅ reminder_scheduler + capabilities | — | — | ✅ |
+| 偏好设置 Esc 关闭 | — | — | ✅ J2（已加 useEffect keydown） | ✅ |
 
 ### 系统能力
 
@@ -89,26 +93,49 @@
 
 ---
 
-## E2E 场景明细（Chromium + 真实事件）
+## E2E 场景明细（Chromium + Tauri mock + 真实 CDP 事件）
 
 | ID | 场景 | 工具 | 结果 |
 |----|------|------|------|
+| MOCK | Tauri mock 注入（Page.addScriptToEvaluateOnNewDocument） | CDP Page | ✅ |
+| P0 | 新建按钮 + invoke("new_mmap") | evaluate + click | ✅ |
 | A1 | me-root 渲染 | evaluate | ✅ |
-| A2 | mind 实例 | evaluate | ✅ |
-| A3 | 工具栏按钮 10+ | evaluate | ✅ |
-| A4 | 侧边栏 4 tab | evaluate | ✅ |
-| A5 | 搜索框 | evaluate | ✅ |
-| A6 | 状态栏 | evaluate | ✅ |
-| B1 | click 根 + Tab → 1 级 | click + press_key | ✅ |
-| B2 | click 1 级 + Tab → 2 级 | click + press_key | ✅ |
-| B3 | click 2 级 + Tab → 3 级 | click + press_key | ✅ |
-| C1 | F2 → 编辑框 | press_key | ✅ |
-| C2 | type "测试节点" + Enter | type_text | ✅ |
-| D | P0 优先级设置 | click | ✅ |
-| E | 撤销/重做 | press_key Meta+z | ✅（修复后） |
-| F | drag 节点改层级 | drag | ✅ |
-| G1-G6 | Tab 切换（属性/样式/大纲/提醒） | click | ✅ |
-| H1 | 搜索框输入 | input event | ✅ |
-| J1 | 偏好设置打开 | click | ✅ |
-| J2 | 偏好设置关闭 | click | ✅ |
-| K1 | 保存触发 invoke | click + mock | ✅ |
+| A2 | mind 实例可用 | evaluate | ✅ |
+| A3 | 工具栏按钮数 ≥ 10 | evaluate | ✅ 18 个 |
+| A4 | 侧边栏 4 个 tab | evaluate | ✅ |
+| A5 | 搜索框存在 | evaluate | ✅ |
+| A6 | 状态栏存在 | evaluate | ✅ |
+| A-主题 | 中心主题渲染 | evaluate | ✅ |
+| B1 | selectNode(root) + CDP Tab → 1 级 | rawKeyDown | ✅ 1→2 |
+| B2 | selectLast + Tab → 2 级 | rawKeyDown | ✅ 2→3 |
+| B3 | selectLast + Tab → 3 级 | rawKeyDown | ✅ 3→4 |
+| C1 | F2 → input-box 出现 | rawKeyDown | ✅ |
+| C2 | Input.insertText + Enter 保存 | insertText + rawKeyDown | ✅ "E2E测试节点" |
+| D-按钮 | 找到并点击 P0 按钮 | click | ✅ |
+| D-类 | priority-p0 类已应用 | getComputedStyle | ✅ |
+| D-边框 | 全包围 2px solid rgb(231,76,60) | getComputedStyle | ✅ |
+| D-图标 | ::before 图标注入（left:-22px,width:16px,data:image/svg） | getComputedStyle | ✅ |
+| D-清除 | 再次点击 P0 清除 | click | ✅ |
+| D2-设置 | 设置 P1 + nodeObj/DOM/store 三方一致 | evaluate | ✅ |
+| D2-保留 | 切换节点后 priority class 保留（回归 BUG 修复） | selectNode + getComputedStyle | ✅ |
+| E1 | Cmd+Z 撤销（节点数验证） | dispatchKeyEvent | ✅ |
+| E2 | Cmd+Shift+Z 重做 | dispatchKeyEvent | ✅ |
+| F1 | Enter 创建兄弟节点 | rawKeyDown | ✅ 4→5 |
+| G-大纲/样式/提醒/面板 | sidebar-tab.click + active class 验证 | click + classList | ✅ |
+| H1 | 搜索框 click + insertText | clickPoint + insertText | ✅ |
+| J1 | 偏好设置打开（title 匹配） | click | ✅ 20 个 modal 元素 |
+| J2 | Esc 关闭偏好设置（已加 useEffect keydown） | rawKeyDown | ✅（已修复） |
+| J3-tab | 切换到"提醒" tab | evaluate click | ✅ |
+| J3-存在 | "触发 macOS 系统通知" checkbox 存在 + label 文案正确 | evaluate | ✅ |
+| J3-切换 | 点击 checkbox 切换状态 | click + checked 验证 | ✅ |
+| M-渲染 | 节点带 reminder 时渲染沙漏 wrapper | evaluate + setAllReminders | ✅ |
+| M-SVG | 沙漏 SVG 内部多 path(rect/玻璃/沙堆/stream) | DOM querySelector | ✅ |
+| M-状态 | 未来状态显示 hourglass-future class | classList 验证 | ✅ |
+| M-穿透 | pointer-events: none(点击穿透到下层节点) | getComputedStyle | ✅ |
+| M-到期 | 到期状态切换 due class + flow-fast 动画 | classList 验证 | ✅ |
+| M-清理 | 删除 reminder 后沙漏 wrapper 移除 | evaluate + DOM | ✅ |
+| N-标题 | 面板有"附加文件"区域 | evaluate querySelector | ✅ |
+| N-按钮 | 7 种文件类型按钮(图片/PDF/PPT/Word/Excel/视频/音频) | evaluate | ✅ |
+| N-渲染 | attached_file 节点渲染 attached-render | store update + DOM | ✅ |
+| K1 | store 状态可读（dirty/saveStatus/history） | evaluate | ✅ past=30 |
+| L1 | Delete 删除节点 | rawKeyDown | ✅ 5→4 |

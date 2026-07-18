@@ -5,7 +5,6 @@ export function makeNode(overrides: Partial<MindNode> = {}): MindNode {
   return {
     id: overrides.id ?? `node-${Math.random().toString(36).slice(2, 10)}`,
     topic: overrides.topic ?? "默认主题",
-    note: overrides.note,
     priority: overrides.priority,
     image: overrides.image,
     icons: overrides.icons,
@@ -13,6 +12,7 @@ export function makeNode(overrides: Partial<MindNode> = {}): MindNode {
     style: overrides.style,
     collapsed: overrides.collapsed ?? false,
     children: overrides.children ?? [],
+    attached_file: overrides.attached_file,
   };
 }
 
@@ -65,6 +65,7 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
       default_priority: "P2",
       snooze_minutes: 5,
       show_modal_when_background: false,
+      system_notification_enabled: true,
       ...overrides.reminder,
     },
     export: {

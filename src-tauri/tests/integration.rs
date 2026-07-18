@@ -84,20 +84,24 @@ fn int_save_open_roundtrip() {
 fn int_save_creates_backup_on_second_write() {
     let _td = TestDir::new("backup");
     let path = _td.path.join("test.mmap");
-    let backup = _td.path.join("test.backup.mmap");
+    // 新格式:backup 是 mmap 目录内的 content.json.bak
+    let backup = path.join("content.json.bak");
 
-    // 第一次保存（无 backup）
+    // 第一次保存(无 backup,因为 content.json 还不存在)
     let c1 = commands::new_mmap(Some("v1".into())).unwrap();
     commands::save_mmap(path.to_string_lossy().into(), c1).unwrap();
-    assert!(!backup.exists());
+    assert!(!backup.exists(), "首次保存不应有 backup");
 
-    // 第二次保存（生成 backup，内容是 v1）
+    // 第二次保存(生成 backup,内容是 v1)
     let c2 = commands::new_mmap(Some("v2".into())).unwrap();
     commands::save_mmap(path.to_string_lossy().into(), c2).unwrap();
-    assert!(backup.exists());
+    assert!(backup.exists(), "二次保存应生成 content.json.bak");
 
-    let backup_content = commands::open_mmap(backup.to_string_lossy().into()).unwrap();
+    // backup 内容应是 v1(覆盖前的版本)
+    let backup_bytes = std::fs::read(&backup).unwrap();
+    let backup_content: mindmap_app_lib::models::Content = serde_json::from_slice(&backup_bytes).unwrap();
     assert_eq!(backup_content.root.topic, "v1");
+
 
     // 主文件应是 v2
     let main = commands::open_mmap(path.to_string_lossy().into()).unwrap();
@@ -225,7 +229,6 @@ fn int_save_mmap_with_complex_tree() {
     let mut root = mindmap_app_lib::models::Node::new("根");
     let mut child = mindmap_app_lib::models::Node::new("子");
     child.priority = Some(mindmap_app_lib::models::Priority::P0);
-    child.note = Some("重要节点".into());
     child.children.push(mindmap_app_lib::models::Node::new("孙"));
     root.children.push(child);
 
@@ -243,7 +246,6 @@ fn int_save_mmap_with_complex_tree() {
     let c = &loaded.root.children[0];
     assert_eq!(c.topic, "子");
     assert_eq!(c.priority, Some(mindmap_app_lib::models::Priority::P0));
-    assert_eq!(c.note.as_deref(), Some("重要节点"));
     assert_eq!(c.children.len(), 1);
     assert_eq!(c.children[0].topic, "孙");
 }
@@ -258,14 +260,14 @@ fn int_save_mmap_preserves_created_at_across_saves() {
 
     let first = commands::open_mmap(path.to_string_lossy().into()).unwrap();
     let mmap_first =
-        mindmap_app_lib::mmap::MmapFile::read_from_path(&path).unwrap();
+        mindmap_app_lib::mmap::MmapFile::open_at(&path).unwrap();
     let created_first = mmap_first.meta.created_at;
 
     std::thread::sleep(std::time::Duration::from_millis(20));
 
     commands::save_mmap(path.to_string_lossy().into(), c.clone()).unwrap();
     let mmap_second =
-        mindmap_app_lib::mmap::MmapFile::read_from_path(&path).unwrap();
+        mindmap_app_lib::mmap::MmapFile::open_at(&path).unwrap();
     let created_second = mmap_second.meta.created_at;
     let modified_second = mmap_second.meta.modified_at;
 

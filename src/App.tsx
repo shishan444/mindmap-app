@@ -17,7 +17,7 @@ import {
   logError,
   logState,
 } from "./utils/devLogger";
-import type { Config, Content, Priority } from "./types";
+import type { Config, Content, Priority, Reminder } from "./types";
 import "./App.css";
 
 // 模块加载时初始化 dev 日志
@@ -31,6 +31,7 @@ function App() {
   const setContent = useMindMapStore((s) => s.setContent);
   const setFilePath = useMindMapStore((s) => s.setFilePath);
   const setConfig = useMindMapStore((s) => s.setConfig);
+  const setAllReminders = useMindMapStore((s) => s.setAllReminders);
   const mindInstanceRef = useRef<any>(null);
 
   // 启用自动保存（防抖 2 秒）
@@ -112,6 +113,24 @@ function App() {
       }
     })();
   }, [setContent, setFilePath, setConfig]);
+
+  // === 加载全局 reminders + 每分钟刷新(用于画布渲染沙漏) ===
+  useEffect(() => {
+    let timer: number | undefined;
+    const load = async () => {
+      try {
+        const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
+        setAllReminders(idx.reminders || []);
+      } catch (e) {
+        console.warn("[App] 加载 reminders 失败", e);
+      }
+    };
+    load();
+    timer = window.setInterval(load, 60_000);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [setAllReminders]);
 
   const handleNew = async () => {
     const c = await invoke<Content>("new_mmap", { topic: "中心主题" });

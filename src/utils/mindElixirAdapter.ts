@@ -36,7 +36,6 @@ export function nodeToMindElixirNode(node: MindNode): any {
     expanded: node.collapsed !== true,
   };
   // 保留扩展字段（让 mind-elixir 内部 dispatch 时能带回来）
-  if (node.note !== undefined && node.note !== null) me.note = node.note;
   if (node.priority !== undefined && node.priority !== null) {
     me.priority = node.priority;
   }
@@ -88,7 +87,6 @@ export function fromMindElixirNode(node: any): MindNode {
     id: String(node.id ?? ""),
     topic: String(node.topic ?? ""),
     collapsed: node.expanded === false,
-    note: node.note,
     priority: node.priority,
     image,
     icons: Array.isArray(node.icons) ? node.icons : [],

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { temporal } from "zundo";
-import type { Config, Content, MindNode, Priority, SidebarTab } from "./types";
+import type { Config, Content, MindNode, Priority, Reminder, SidebarTab } from "./types";
 
 interface MindMapState {
   // 当前文档
@@ -53,6 +53,10 @@ interface MindMapState {
 
   // 撤销重做后需要 store→mind 反向同步
   needStoreToMindSync: boolean;
+
+  // 全局 reminders 缓存(用于画布渲染沙漏,定时刷新)
+  allReminders: Reminder[];
+  setAllReminders: (rs: Reminder[]) => void;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -128,6 +132,10 @@ export const useMindMapStore = create<MindMapState>()(
           dirty: true,
           nodeCount: countNodes(newRoot),
         });
+        // 关键:同步到 mind-elixir nodeObj
+        // 否则下次 selectNode 触发 syncFromMindElixir 时,mind 数据里这些扩展字段为空,
+        // 会用 mind 数据覆盖 store 导致 priority/note 等字段丢失
+        syncToMindNodeObj(get().mindInstance, selectedId, updates);
       },
 
       setPriorityForSelected: (p) => {
@@ -164,6 +172,17 @@ export const useMindMapStore = create<MindMapState>()(
       mindInstance: null,
       setMindInstance: (mind) => set({ mindInstance: mind }),
       needStoreToMindSync: false,
+
+      allReminders: [],
+      setAllReminders: (rs) => {
+        set({ allReminders: rs });
+        // 通过 mindInstance 直接触发画布沙漏同步(避免 React 渲染周期时序问题)
+        setTimeout(() => {
+          if (typeof window !== "undefined" && (window as any).__syncHourglasses) {
+            (window as any).__syncHourglasses();
+          }
+        }, 50);
+      },
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）
@@ -233,6 +252,31 @@ function updateNodeById(
     }
   }
   return null;
+}
+
+/**
+ * 把 store 的扩展字段更新同步到 mind-elixir 的 nodeObj。
+ *
+ * 为什么需要这个:store.content 和 mind-elixir 内部 nodeData 是两份数据副本。
+ * mind-elixir 自己只会通过 reshapeNode/editTopic 等 API 修改 nodeObj,不知道我们的扩展字段
+ * (priority/note/reminder_ids/style)。如果用户在面板里改了这些字段后只更新 store,
+ * mind-elixir 的 nodeObj 还停留在旧值。下次 selectNode 触发 syncFromMindElixir 时,
+ * fromMindElixirData 会用 mind 数据重建 content,扩展字段就会被 undefined 覆盖,
+ * 紧接着 syncPriorityStyles 走 store 发现 priority 没了 → DOM 上 priority class 被移除 → 视觉标记丢失。
+ */
+function syncToMindNodeObj(mind: any, id: string, updates: Partial<MindNode>) {
+  if (!mind || typeof mind.findEle !== "function") return;
+  const tpc = mind.findEle(id);
+  const nodeObj = tpc?.nodeObj;
+  if (!nodeObj) return;
+  for (const [k, v] of Object.entries(updates)) {
+    // undefined / null / 空数组 都视为"清除字段",保持 nodeObj 干净(避免 toMindElixirData 时再次写入)
+    if (v === undefined || v === null || (Array.isArray(v) && v.length === 0)) {
+      delete nodeObj[k];
+    } else {
+      nodeObj[k] = v;
+    }
+  }
 }
 
 // dev 模式暴露 store 到 window 便于调试

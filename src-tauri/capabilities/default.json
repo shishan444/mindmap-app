@@ -9,6 +9,10 @@
     "dialog:default",
     "fs:default",
     "fs:allow-read-text-file",
-    "fs:allow-write-text-file"
+    "fs:allow-write-text-file",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
   ]
 }

@@ -1,11 +1,12 @@
 //! 提醒调度器：托盘进程内后台线程，定期轮询 reminders.json，
-//! 到点触发（emit 事件给前端 + 后续可接入系统通知）。
+//! 到点触发（emit 事件给前端 + 发系统通知）。
 
 use std::thread;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
 use crate::models::Reminder;
 
@@ -69,9 +70,20 @@ fn poll_once(app: &AppHandle) -> Result<(), String> {
             eprintln!("[reminder-scheduler] save error: {}", e);
         }
 
-        // emit 事件给前端
+        // emit 事件给前端 + 发系统通知（macOS 通知中心）
         for r in &triggered {
             let _ = app.emit("reminder-triggered", r.clone());
+            // 系统通知（用户可在偏好设置中关闭）
+            let enabled = read_system_notification_enabled(app);
+            if enabled {
+                let mut builder = app.notification().builder().title(&r.title);
+                if let Some(msg) = r.message.as_ref() {
+                    builder = builder.body(msg);
+                }
+                if let Err(e) = builder.show() {
+                    eprintln!("[reminder-scheduler] 系统通知失败: {}", e);
+                }
+            }
             println!(
                 "[reminder-scheduler] 🔔 triggered: {} (node: {})",
                 r.title, r.node_id
@@ -80,6 +92,14 @@ fn poll_once(app: &AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// 读 config.reminder.system_notification_enabled（默认 true，配置读取失败时也默认开启）
+fn read_system_notification_enabled(_app: &AppHandle) -> bool {
+    match crate::config::load_config() {
+        Ok(cfg) => cfg.reminder.system_notification_enabled,
+        Err(_) => true,
+    }
 }
 
 fn parse_local_time(s: &str) -> Option<DateTime<Local>> {

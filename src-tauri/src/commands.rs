@@ -4,9 +4,9 @@ use crate::config::{
     self, app_data_dir, config_path, ensure_app_data_dir, load_config, load_recent_files,
     save_config, save_recent_files,
 };
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::mmap::MmapFile;
-use crate::models::{Config, Content, RecentFiles, Reminder, ReminderIndex};
+use crate::models::{AttachedFile, Config, Content, FileType, RecentFiles, Reminder, ReminderIndex};
 
 // ===== 配置相关 =====
 
@@ -58,45 +58,41 @@ pub fn remove_recent_file(path: String) -> Result<RecentFiles> {
     Ok(rf)
 }
 
-// ===== .mmap 文件操作 =====
+// ===== .mmap 文件操作(Package 目录机制) =====
 
-/// 读取 .mmap 文件，返回 content（前端用的主要数据）
+/// 读取 .mmap 目录,返回 content
 #[tauri::command]
 pub fn open_mmap(path: String) -> Result<Content> {
     let p = PathBuf::from(&path);
-    let mmap = MmapFile::read_from_path(&p)?;
+    let mmap = MmapFile::open_at(&p)?;
     Ok(mmap.content)
 }
 
-/// 创建新文档（不写盘，仅返回默认 Content）
+/// 创建新文档(不写盘,仅返回默认 Content;首次 save_mmap 时创建目录)
 #[tauri::command]
 pub fn new_mmap(topic: Option<String>) -> Result<Content> {
     let topic = topic.unwrap_or_else(|| "中心主题".to_string());
     Ok(Content::new(topic))
 }
 
-/// 保存到 .mmap 文件（原子写入 + 单份备份）
+/// 保存到 .mmap 目录(原子写 content.json + 单份备份)
 #[tauri::command]
 pub fn save_mmap(path: String, content: Content) -> Result<()> {
-    // 读已有文件的 meta（如果有），保留 created_at
     let p = PathBuf::from(&path);
-    let mut meta = if p.exists() {
-        match MmapFile::read_from_path(&p) {
-            Ok(existing) => existing.meta,
-            Err(_) => crate::models::Meta::new(),
-        }
+    // 已存在 → 打开(保留 meta);不存在 → 创建
+    let mut mmap = if p.exists() && p.is_dir() {
+        let mut existing = MmapFile::open_at(&p)?;
+        existing.content = content;
+        existing
     } else {
-        crate::models::Meta::new()
+        // 用 root.topic 创建(后续 save 内部建目录)
+        MmapFile {
+            meta: crate::models::Meta::new(),
+            content,
+            root: p.clone(),
+        }
     };
-    meta.touch();
-
-    // 暂不处理 assets（Phase 2 才做图片）
-    let mmap = MmapFile {
-        meta,
-        content,
-        assets: vec![],
-    };
-    mmap.write_to_path(&p)
+    mmap.save()
 }
 
 /// 把 last_opened_file 更新到 config（启动时恢复用）
@@ -106,6 +102,234 @@ pub fn set_last_opened_file(path: Option<String>) -> Result<Config> {
     cfg.last_opened_file = path;
     save_config(&cfg)?;
     Ok(cfg)
+}
+
+// ===== 附加文件操作(Package 目录机制) =====
+
+/// 把用户选择的文件复制到 mindmap 的 assets/ 目录,绑定到指定节点。
+/// 返回更新后的 AttachedFile(前端用于更新 store.content)。
+#[tauri::command]
+pub fn attach_file_to_node(
+    mmap_path: String,
+    node_id: String,
+    src_path: String,
+) -> Result<AttachedFile> {
+    let src = PathBuf::from(&src_path);
+    if !src.exists() {
+        return Err(AppError::FileNotFound(src_path));
+    }
+    let bytes = std::fs::read(&src)?;
+    let original_name = src
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".to_string());
+    // 扩展名(小写无点)
+    let ext = src
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if ext.is_empty() {
+        return Err(AppError::InvalidFormat("文件无扩展名".to_string()));
+    }
+    let file_type = FileType::from_extension(&ext);
+    let uuid = uuid::Uuid::new_v4().to_string();
+
+    // 复制到 mmap 目录的 assets/{uuid}.{ext}
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap = MmapFile::open_at(&mmap_root)?;
+    mmap.add_asset(&uuid, &ext, &bytes)?;
+
+    // 生成缩略图(只对需要缩略图的类型)
+    if file_type.needs_thumbnail() {
+        if let Some(thumb_bytes) = generate_thumbnail(&mmap, &uuid, &ext, &file_type, &bytes) {
+            let _ = mmap.write_thumbnail(&uuid, &thumb_bytes);
+        }
+    }
+
+    // 修改 content:把 attached_file 写入指定节点,topic 替换为文件名(无扩展名)
+    let mut content = mmap.content.clone();
+    let stem = original_name.trim_end_matches(&format!(".{}", ext));
+    attach_to_node_in_place(&mut content.root, &node_id, AttachedFile {
+        uuid: uuid.clone(),
+        original_name: original_name.clone(),
+        ext: ext.clone(),
+        file_type: file_type.clone(),
+        size_bytes: bytes.len() as u64,
+        attached_at: chrono::Utc::now().to_rfc3339(),
+    }, stem);
+
+    // 保存(用 MmapFile::save,需要重新打开为 mut)
+    let mut mmap_w = MmapFile::open_at(&mmap_root)?;
+    mmap_w.content = content;
+    mmap_w.save()?;
+
+    // 返回新建的 AttachedFile
+    Ok(AttachedFile {
+        uuid,
+        original_name,
+        ext,
+        file_type,
+        size_bytes: bytes.len() as u64,
+        attached_at: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
+/// 替换节点的附件(删旧 + 加新),返回新 AttachedFile
+#[tauri::command]
+pub fn replace_attached_file(
+    mmap_path: String,
+    node_id: String,
+    new_src: String,
+) -> Result<AttachedFile> {
+    // 先移除旧的(如果在节点上存在)
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap_r = MmapFile::open_at(&mmap_root)?;
+    if let Some(old) = find_attached_file(&mmap_r.content.root, &node_id) {
+        let _ = mmap_r.remove_asset(&old.uuid, &old.ext);
+    }
+    // 走 attach 流程
+    attach_file_to_node(mmap_path, node_id, new_src)
+}
+
+/// 移除节点附件(删 assets + thumbnails 文件 + 清 Node.attached_file)
+#[tauri::command]
+pub fn remove_attached_file(mmap_path: String, node_id: String) -> Result<()> {
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap_r = MmapFile::open_at(&mmap_root)?;
+    if let Some(old) = find_attached_file(&mmap_r.content.root, &node_id) {
+        let _ = mmap_r.remove_asset(&old.uuid, &old.ext);
+    }
+    let mut content = mmap_r.content.clone();
+    remove_attached_in_place(&mut content.root, &node_id);
+
+    let mut mmap_w = MmapFile::open_at(&mmap_root)?;
+    mmap_w.content = content;
+    mmap_w.save()?;
+    Ok(())
+}
+
+/// 打开附件(系统默认工具)。通过 std::process::Command 调 macOS 的 open
+#[tauri::command]
+pub fn open_attached_file(mmap_path: String, node_id: String) -> Result<()> {
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap = MmapFile::open_at(&mmap_root)?;
+    let attached = find_attached_file(&mmap.content.root, &node_id)
+        .ok_or_else(|| AppError::Other("节点未附加文件".to_string()))?;
+    let asset_path = mmap.get_asset_path(&attached.uuid, &attached.ext);
+    if !asset_path.exists() {
+        return Err(AppError::FileNotFound(asset_path.display().to_string()));
+    }
+    // macOS: open <path>
+    std::process::Command::new("open")
+        .arg(&asset_path)
+        .spawn()
+        .map_err(|e| AppError::Other(format!("打开失败: {}", e)))?;
+    Ok(())
+}
+
+/// 在 Finder 中显示附件
+#[tauri::command]
+pub fn reveal_attached_file(mmap_path: String, node_id: String) -> Result<()> {
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap = MmapFile::open_at(&mmap_root)?;
+    let attached = find_attached_file(&mmap.content.root, &node_id)
+        .ok_or_else(|| AppError::Other("节点未附加文件".to_string()))?;
+    let asset_path = mmap.get_asset_path(&attached.uuid, &attached.ext);
+    // macOS: open -R <path> reveal in Finder
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&asset_path)
+        .spawn()
+        .map_err(|e| AppError::Other(format!("Finder 显示失败: {}", e)))?;
+    Ok(())
+}
+
+/// 读附件缩略图字节(前端用作 img src)。无缩略图返回 null。
+#[tauri::command]
+pub fn read_thumbnail(mmap_path: String, uuid: String) -> Result<Option<Vec<u8>>> {
+    let mmap_root = PathBuf::from(&mmap_path);
+    let mmap = MmapFile::open_at(&mmap_root)?;
+    let thumb_path = mmap.get_thumbnail_path(&uuid);
+    if !thumb_path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&thumb_path)?;
+    Ok(Some(bytes))
+}
+
+// === 内部 helpers ===
+
+fn attach_to_node_in_place(root: &mut crate::models::Node, node_id: &str, file: AttachedFile, new_topic: &str) {
+    if root.id == node_id {
+        root.attached_file = Some(file);
+        root.topic = new_topic.to_string();
+        return;
+    }
+    for child in root.children.iter_mut() {
+        attach_to_node_in_place(child, node_id, file.clone(), new_topic);
+    }
+}
+
+fn remove_attached_in_place(root: &mut crate::models::Node, node_id: &str) {
+    if root.id == node_id {
+        root.attached_file = None;
+        return;
+    }
+    for child in root.children.iter_mut() {
+        remove_attached_in_place(child, node_id);
+    }
+}
+
+fn find_attached_file<'a>(root: &'a crate::models::Node, node_id: &str) -> Option<&'a AttachedFile> {
+    if root.id == node_id {
+        return root.attached_file.as_ref();
+    }
+    for child in root.children.iter() {
+        if let Some(f) = find_attached_file(child, node_id) {
+            return Some(f);
+        }
+    }
+    None
+}
+
+/// 生成缩略图(类型差异化):
+/// - Image: 复制原文件作为缩略图(图片本身就是缩略图)
+/// - 其他需要 QL 的类型:走 qlmanage shell 命令(macOS Quick Look)
+fn generate_thumbnail(_mmap: &MmapFile, _uuid: &str, _ext: &str, file_type: &FileType, original_bytes: &[u8]) -> Option<Vec<u8>> {
+    match file_type {
+        FileType::Image => {
+            // 图片直接用原文件作为缩略图(前端会自适应显示尺寸)
+            Some(original_bytes.to_vec())
+        }
+        FileType::Pdf | FileType::Slide | FileType::Doc | FileType::Sheet => {
+            // 走 qlmanage -t -s 400 <file> -out <png_path>
+            // 实现简化:把原文件写到临时路径,调 qlmanage,读输出 png
+            let temp_dir = std::env::temp_dir();
+            let temp_file = temp_dir.join(format!("mindmap-ql-input-{}.{}", uuid::Uuid::new_v4(), _ext));
+            std::fs::write(&temp_file, original_bytes).ok()?;
+            let out_dir = temp_dir.join(format!("mindmap-ql-out-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&out_dir).ok()?;
+            let _output = std::process::Command::new("qlmanage")
+                .arg("-t")
+                .arg("-s").arg("400")
+                .arg("-o").arg(&out_dir)
+                .arg(&temp_file)
+                .output()
+                .ok()?;
+            let _ = std::fs::remove_file(&temp_file);
+            // qlmanage 输出 <input-name>.png 在 out_dir
+            let png_name = format!("{}.png", temp_file.file_name()?.to_string_lossy());
+            let png_path = out_dir.join(&png_name);
+            if !png_path.exists() {
+                let _ = std::fs::remove_dir_all(&out_dir);
+                return None;
+            }
+            let bytes = std::fs::read(&png_path).ok();
+            let _ = std::fs::remove_dir_all(&out_dir);
+            bytes
+        }
+        _ => None,
+    }
 }
 
 /// 把 last_open_dir / last_export_dir / last_import_dir 更新到 config

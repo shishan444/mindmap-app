@@ -28,6 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // 初始化应用数据目录（~/Library/Application Support/MindMap/）
             if let Err(e) = commands::init_app_data() {
@@ -80,6 +81,12 @@ pub fn run() {
             commands::upsert_reminder,
             commands::delete_reminder,
             commands::get_reminders_for_node,
+            commands::attach_file_to_node,
+            commands::replace_attached_file,
+            commands::remove_attached_file,
+            commands::open_attached_file,
+            commands::reveal_attached_file,
+            commands::read_thumbnail,
             commands::log_event,
             commands::is_dev_logger_ready,
             commands::import_freemind_file,

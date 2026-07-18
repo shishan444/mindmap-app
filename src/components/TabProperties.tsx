@@ -1,13 +1,16 @@
-import { useState } from "react";
 import {
   CircleDashed, Loader, CheckCircle, Ban, Pause,
   Flame, TrendingUp, Minus, ArrowDown,
   Bug, Sparkles, ListTodo, Lightbulb, FileText,
   Star, AlertTriangle, Lock, Pin, Flag, Bookmark,
   X,
+  FileType2, FileText as FileDoc, Presentation, Sheet, Film, Music, Image as ImageIcon,
+  Upload, FolderOpen, Trash2, ExternalLink,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMindMapStore } from "../store";
-import type { Priority } from "../types";
+import type { AttachedFile, FileType, Priority } from "../types";
 import "./Common.css";
 
 // 图标分类：lucide SVG 组件 + emoji 存储 + 业务语义
@@ -75,11 +78,10 @@ function findNode(root: any, id: string | null): any | null {
 export default function TabProperties() {
   const content = useMindMapStore((s) => s.content);
   const selectedId = useMindMapStore((s) => s.selectedNodeId);
+  const filePath = useMindMapStore((s) => s.filePath);
   const mind = useMindMapStore((s) => s.mindInstance);
   const setPriorityForSelected = useMindMapStore((s) => s.setPriorityForSelected);
-  const updateSelectedNode = useMindMapStore((s) => s.updateSelectedNode);
-  const [showIconPicker, setShowIconPicker] = useState(true);
-  const [noteDraft, setNoteDraft] = useState<string>("");
+  const updateContent = useMindMapStore((s) => s.updateContent);
 
   const node = findNode(content?.root ?? null, selectedId);
   if (!node) {
@@ -90,16 +92,141 @@ export default function TabProperties() {
     );
   }
 
+  // === 附加文件 ===
+  const fileTypeFilters: { type: FileType; label: string; Icon: any; exts: string[] }[] = [
+    { type: "image", label: "图片", Icon: ImageIcon, exts: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"] },
+    { type: "pdf", label: "PDF", Icon: FileType2, exts: ["pdf"] },
+    { type: "slide", label: "演示", Icon: Presentation, exts: ["ppt", "pptx", "key"] },
+    { type: "doc", label: "文档", Icon: FileDoc, exts: ["doc", "docx", "pages", "rtf", "txt", "md"] },
+    { type: "sheet", label: "表格", Icon: Sheet, exts: ["xls", "xlsx", "numbers", "csv"] },
+    { type: "video", label: "视频", Icon: Film, exts: ["mp4", "mov", "m4v", "avi", "mkv", "webm"] },
+    { type: "audio", label: "音频", Icon: Music, exts: ["mp3", "wav", "m4a", "aac", "flac", "ogg"] },
+  ];
+
+  const handleAttach = async (fileType: FileType, exts: string[]) => {
+    if (!filePath || !selectedId) return;
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: fileType, extensions: exts }],
+    });
+    if (typeof selected !== "string" || !selected) return;
+    try {
+      const attached = await invoke<AttachedFile>("attach_file_to_node", {
+        mmapPath: filePath,
+        nodeId: selectedId,
+        srcPath: selected,
+      });
+      // 更新 store.content,把 attached_file 写入对应节点 + topic 替换为文件名 stem
+      const stem = attached.original_name.replace(new RegExp(`\\.${attached.ext}$`, "i"), "");
+      updateContent((c) => {
+        const walk = (n: any): boolean => {
+          if (n.id === selectedId) {
+            n.attached_file = attached;
+            n.topic = stem;
+            return true;
+          }
+          for (const child of n.children || []) {
+            if (walk(child)) return true;
+          }
+          return false;
+        };
+        walk(c.root);
+      });
+    } catch (e) {
+      alert("附加文件失败: " + e);
+    }
+  };
+
+  const handleRemoveAttached = async () => {
+    if (!filePath || !selectedId || !node.attached_file) return;
+    if (!confirm("确定移除附件?")) return;
+    try {
+      await invoke("remove_attached_file", { mmapPath: filePath, nodeId: selectedId });
+      updateContent((c) => {
+        const walk = (n: any): boolean => {
+          if (n.id === selectedId) {
+            n.attached_file = undefined;
+            return true;
+          }
+          for (const child of n.children || []) {
+            if (walk(child)) return true;
+          }
+          return false;
+        };
+        walk(c.root);
+      });
+    } catch (e) {
+      alert("移除附件失败: " + e);
+    }
+  };
+
+  const handleOpenAttached = async () => {
+    if (!filePath || !selectedId || !node.attached_file) return;
+    try {
+      await invoke("open_attached_file", { mmapPath: filePath, nodeId: selectedId });
+    } catch (e) {
+      alert("打开失败: " + e);
+    }
+  };
+
+  const handleReplaceAttached = async () => {
+    if (!filePath || !selectedId || !node.attached_file) return;
+    const selected = await openDialog({
+      multiple: false,
+    });
+    if (typeof selected !== "string" || !selected) return;
+    try {
+      const attached = await invoke<AttachedFile>("replace_attached_file", {
+        mmapPath: filePath,
+        nodeId: selectedId,
+        newSrc: selected,
+      });
+      const stem = attached.original_name.replace(new RegExp(`\\.${attached.ext}$`, "i"), "");
+      updateContent((c) => {
+        const walk = (n: any): boolean => {
+          if (n.id === selectedId) {
+            n.attached_file = attached;
+            n.topic = stem;
+            return true;
+          }
+          for (const child of n.children || []) {
+            if (walk(child)) return true;
+          }
+          return false;
+        };
+        walk(c.root);
+      });
+    } catch (e) {
+      alert("替换附件失败: " + e);
+    }
+  };
+
+  const handleReveal = async () => {
+    if (!filePath || !selectedId || !node.attached_file) return;
+    try {
+      await invoke("reveal_attached_file", { mmapPath: filePath, nodeId: selectedId });
+    } catch (e) {
+      alert("Finder 显示失败: " + e);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const btnStyle: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: 4,
+    padding: "4px 8px", fontSize: 11,
+    border: "1px solid #d1d1d1", borderRadius: 4,
+    background: "#fff", color: "#666", cursor: "pointer",
+  };
+
   // 优先级设置/清除
   const handlePriority = (p: Priority) => {
     const next: Priority | null = node.priority === p ? null : p;
     setPriorityForSelected(next);
-  };
-
-  // 备注编辑
-  const handleNoteChange = (value: string) => {
-    setNoteDraft(value);
-    updateSelectedNode({ note: value || undefined });
   };
 
   // 图标操作
@@ -124,7 +251,6 @@ export default function TabProperties() {
   };
 
   const currentIcons = node.icons || [];
-  const currentNote = noteDraft !== null ? noteDraft : (node.note || "");
 
   return (
     <div className="tab-pane">
@@ -160,18 +286,6 @@ export default function TabProperties() {
         )}
       </div>
 
-      {/* === 备注 === */}
-      <div className="field">
-        <span className="field-label">备注</span>
-        <textarea
-          className="field-textarea"
-          value={currentNote}
-          onChange={(e) => handleNoteChange(e.target.value)}
-          placeholder="输入备注..."
-          style={{ minHeight: 60, background: "#fff", cursor: "text" }}
-        />
-      </div>
-
       {/* === 图标 === */}
       <div className="field">
         <span className="field-label">图标</span>
@@ -200,29 +314,16 @@ export default function TabProperties() {
           </div>
         )}
 
-        {/* 图标选择器展开/收起 */}
-        <button
-          onClick={() => setShowIconPicker(!showIconPicker)}
-          style={{
-            width: "100%", padding: "4px 8px", fontSize: 11,
-            border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer",
-            background: showIconPicker ? "#e8f4ff" : "#fff",
-          }}
-        >
-          {showIconPicker ? "▲ 收起图标" : "▼ 选择图标"}
-        </button>
-
-        {/* SVG 图标选择器 */}
-        {showIconPicker && (
-          <div style={{ marginTop: 6, padding: 8, background: "#f9f9f9", borderRadius: 4, border: "1px solid #e8e8e8" }}>
-            {ICON_CATEGORIES.map((cat) => (
-              <div key={cat.label} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontWeight: 600 }}>
-                  {cat.label}
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                  {cat.icons.map(({ emoji, label, Icon }) => {
-                    const selected = currentIcons.includes(emoji);
+        {/* SVG 图标选择器(始终展示) */}
+        <div style={{ marginTop: 6, padding: 8, background: "#f9f9f9", borderRadius: 4, border: "1px solid #e8e8e8" }}>
+          {ICON_CATEGORIES.map((cat) => (
+            <div key={cat.label} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontWeight: 600 }}>
+                {cat.label}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                {cat.icons.map(({ emoji, label, Icon }) => {
+                  const selected = currentIcons.includes(emoji);
                     return (
                       <button
                         key={emoji}
@@ -245,7 +346,57 @@ export default function TabProperties() {
               </div>
             ))}
           </div>
-        )}
+      </div>
+
+      {/* === 附加文件 === */}
+      <div className="field">
+        <span className="field-label">附加文件</span>
+
+        {/* 已附加文件信息 + 操作 */}
+        {node.attached_file ? (
+          <div style={{ padding: 8, background: "#f0f7ff", border: "1px solid #d0e0ee", borderRadius: 4, marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#333", marginBottom: 4 }}>
+              {node.attached_file.original_name}
+            </div>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+              {formatSize(node.attached_file.size_bytes)} · {node.attached_file.ext.toUpperCase()}
+            </div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              <button onClick={handleOpenAttached} title="用系统工具打开" style={btnStyle}>
+                <ExternalLink size={12} /> 打开
+              </button>
+              <button onClick={handleReplaceAttached} title="替换文件" style={btnStyle}>
+                <Upload size={12} /> 替换
+              </button>
+              <button onClick={handleReveal} title="在 Finder 中显示" style={btnStyle}>
+                <FolderOpen size={12} /> Finder
+              </button>
+              <button onClick={handleRemoveAttached} title="移除附件" style={{ ...btnStyle, color: "#e74c3c" }}>
+                <Trash2 size={12} /> 移除
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 文件类型选择器(点击 → 弹文件选择器) */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: 8, background: "#f9f9f9", borderRadius: 4, border: "1px solid #e8e8e8" }}>
+          {fileTypeFilters.map(({ type, label, Icon, exts }) => (
+            <button
+              key={type}
+              onClick={() => handleAttach(type, exts)}
+              title={`${label} (${exts.join(", ")})`}
+              style={{
+                width: 36, height: 36, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                border: "1px solid #e0e0e0", borderRadius: 4,
+                cursor: "pointer", background: "#fff",
+                transition: "all 0.1s",
+              }}
+            >
+              <Icon size={18} color="#666" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -180,3 +180,58 @@
 .mind-elixir-inner me-tpc.priority-p3::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2395a5a6' stroke-width='2.5' stroke-dasharray='4 4'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E");
 }
+
+/* === Hourglass Icon (节点 reminder 状态标识) === */
+/* 沙漏容器:absolute 定位到 tpc 父元素外部右上角 */
+
+.hourglass-wrapper {
+  pointer-events: none;
+}
+
+.hourglass-icon {
+  pointer-events: none;
+  display: block;
+}
+
+/* 沙流动画 — 慢速(looming 状态,2s 周期) */
+@keyframes hourglass-stream-slow {
+  0%, 100% { transform: scaleY(1); opacity: 0.6; }
+  50% { transform: scaleY(1.4); opacity: 1; }
+}
+
+.hourglass-flow-slow .hourglass-stream {
+  transform-origin: 10px 10px;
+  animation: hourglass-stream-slow 2s ease-in-out infinite;
+}
+
+/* 沙流动画 — 快速(due 状态,0.8s 周期,表示紧迫) */
+@keyframes hourglass-stream-fast {
+  0%, 100% { transform: scaleY(1); opacity: 0.7; }
+  50% { transform: scaleY(1.6); opacity: 1; }
+}
+
+.hourglass-flow-fast .hourglass-stream {
+  transform-origin: 10px 10px;
+  animation: hourglass-stream-fast 0.8s ease-in-out infinite;
+}
+
+/* 到期节点整体微脉冲(红色,吸引注意) */
+@keyframes hourglass-due-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(231, 76, 60, 0)); }
+  50% { filter: drop-shadow(0 0 4px rgba(231, 76, 60, 0.8)); }
+}
+
+.hourglass-due {
+  animation: hourglass-due-pulse 1.5s ease-in-out infinite;
+}
+
+/* Reduced-motion:全部降级为静态 */
+@media (prefers-reduced-motion: reduce) {
+  .hourglass-flow-slow .hourglass-stream,
+  .hourglass-flow-fast .hourglass-stream,
+  .hourglass-due,
+  .hourglass-icon {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -12,10 +12,184 @@ import {
   getImageFromDataTransfer,
   getImageFromClipboard,
 } from "../utils/imageEmbed";
+import { computeNodeReminderState } from "../utils/reminderState";
 import "./MindMapCanvas.css";
 
 interface Props {
   onCreateInstance?: (mind: any) => void;
+}
+
+// === 沙漏渲染 helper(module 顶层,多 useEffect 共享) ===
+function syncHourglassesExternal(inst: any, state: any) {
+  if (!inst || !state.content) return;
+  const reminders = state.allReminders || [];
+  const now = new Date();
+  const walk = (node: any) => {
+    const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    if (!tpc) return;
+    // 移除旧沙漏
+    const old = tpc.parentElement?.querySelector(".hourglass-wrapper");
+    if (old) old.remove();
+    // 计算状态
+    const result = computeNodeReminderState(reminders, node.id, now);
+    if (!result.hasActive) {
+      for (const c of node.children || []) walk(c);
+      return;
+    }
+    // 创建沙漏容器,tpc 外部右上角
+    const wrapper = document.createElement("div");
+    wrapper.className = "hourglass-wrapper";
+    wrapper.style.cssText =
+      "position:absolute;right:-18px;top:-8px;z-index:50;pointer-events:none;";
+    wrapper.innerHTML = renderHourglassSvg(result.state, result.remainingRatio);
+    // 插到 tpc 的父元素(me-parent / me-wrapper)
+    const host = tpc.parentElement;
+    if (host && getComputedStyle(host).position === "static") {
+      host.style.position = "relative";
+    }
+    host?.appendChild(wrapper);
+    for (const c of node.children || []) walk(c);
+  };
+  walk(state.content.root);
+}
+
+function renderHourglassSvg(state: string, ratio: number): string {
+  const colors: Record<string, string> = {
+    future: "#4dc4ff",
+    looming: "#f5a623",
+    due: "#e74c3c",
+    done: "#9aa0a6",
+    paused: "#cccccc",
+  };
+  const color = colors[state] || colors.future;
+  const rotation = state === "done" ? 180 : 0;
+  const opacity = state === "paused" ? 0.4 : state === "done" ? 0.6 : 1;
+  const animClass =
+    state === "looming" ? "hourglass-flow-slow" : state === "due" ? "hourglass-flow-fast" : "";
+  const upperRatio = state === "done" ? 0 : Math.max(0, Math.min(1, ratio));
+  const lowerRatio = state === "done" ? 1 : 1 - upperRatio;
+  const upperPath = buildUpperSandPath(upperRatio);
+  const lowerPath = buildLowerSandPath(lowerRatio);
+  const streamOpacity = state === "looming" || state === "due" ? 0.9 : 0;
+  return `<svg width="14" height="14" viewBox="0 0 20 20" class="hourglass-icon hourglass-${state} ${animClass}" style="pointer-events:none;transform:rotate(${rotation}deg);opacity:${opacity};transition:transform 0.4s ease,opacity 0.3s ease;display:block" aria-hidden="true">
+    <rect x="3" y="2" width="14" height="1.5" fill="${color}"/>
+    <rect x="3" y="16.5" width="14" height="1.5" fill="${color}"/>
+    <path d="M4 3.5 L16 3.5 L11 9.5 Q10 10.3 9 9.5 Z" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="1.3" stroke-linejoin="round"/>
+    <path d="M4 16.5 L16 16.5 L11 10.5 Q10 9.7 9 10.5 Z" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="1.3" stroke-linejoin="round"/>
+    ${upperPath ? `<path d="${upperPath}" fill="${color}" fill-opacity="0.85"/>` : ""}
+    ${lowerPath ? `<path d="${lowerPath}" fill="${color}"/>` : ""}
+    <line x1="10" y1="9.5" x2="10" y2="10.5" stroke="${color}" stroke-width="0.6" class="hourglass-stream" opacity="${streamOpacity}"/>
+  </svg>`;
+}
+
+function buildUpperSandPath(ratio: number): string {
+  if (ratio <= 0) return "";
+  const topY = 3.5 + (9.5 - 3.5) * (1 - ratio);
+  const ratioAtTop = (topY - 3.5) / (9.5 - 3.5);
+  const halfWidth = 6 - 5 * ratioAtTop;
+  const cx = 10;
+  return `M${cx - halfWidth} ${topY} L${cx + halfWidth} ${topY} L11 9.5 Q10 10.3 9 9.5 Z`;
+}
+
+function buildLowerSandPath(ratio: number): string {
+  if (ratio <= 0) return "";
+  const topY = 16.5 - (16.5 - 10.5) * ratio;
+  const ratioAtTop = (16.5 - topY) / (16.5 - 10.5);
+  const halfWidth = 6 - 5 * ratioAtTop;
+  const cx = 10;
+  return `M${cx - halfWidth} ${topY} L${cx + halfWidth} ${topY} L16 16.5 L4 16.5 Z`;
+}
+
+// === 附加文件渲染 helper ===
+// 按 attached_file.file_type 差异化渲染:
+// - image/pdf/slide/doc/sheet → 显示真实缩略图(<img>)
+// - video/audio/other → 显示类型图标(SVG)
+function syncAttachedFiles(inst: any, state: any) {
+  if (!inst || !state.content) return;
+  const mmapPath = state.filePath;
+  const walk = (node: any) => {
+    const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    if (!tpc) return;
+    // 移除旧附件渲染
+    const oldRender = tpc.querySelector(".attached-render");
+    if (oldRender) oldRender.remove();
+    const attached = node.attached_file;
+    if (!attached) {
+      for (const c of node.children || []) walk(c);
+      return;
+    }
+    // 创建渲染容器(覆盖在 tpc 内部)
+    const render = document.createElement("div");
+    render.className = "attached-render";
+    render.style.cssText =
+      "position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;background:#fff;";
+
+    if (attached.file_type === "image" || attached.file_type === "pdf" || attached.file_type === "slide" || attached.file_type === "doc" || attached.file_type === "sheet") {
+      // 真实缩略图(异步加载)
+      const img = document.createElement("img");
+      img.style.cssText = "max-width:100%;max-height:100%;object-fit:contain;";
+      img.alt = attached.original_name;
+      // 通过 invoke 读缩略图字节,转 data URL
+      if (mmapPath) {
+        // 用 dynamic import 避免 SSR/测试环境问题
+        (window as any).__TAURI_INTERNALS__?.invoke("read_thumbnail", {
+          mmapPath, uuid: attached.uuid,
+        }).then((bytes: number[] | null) => {
+          if (bytes && bytes.length) {
+            const b64 = bytesToBase64(bytes);
+            img.src = `data:image/png;base64,${b64}`;
+          } else {
+            img.src = fileIconDataUri(attached.file_type);
+          }
+        }).catch(() => {
+          img.src = fileIconDataUri(attached.file_type);
+        });
+      } else {
+        img.src = fileIconDataUri(attached.file_type);
+      }
+      render.appendChild(img);
+    } else {
+      // 视频/音频/其他 — 显示类型图标
+      render.innerHTML = fileIconSvg(attached.file_type);
+    }
+
+    const host = tpc;
+    if (host && getComputedStyle(host).position === "static") {
+      host.style.position = "relative";
+    }
+    host.appendChild(render);
+    for (const c of node.children || []) walk(c);
+  };
+  walk(state.content.root);
+}
+
+// 文件类型 → 内联 SVG(用于 video/audio/other)
+function fileIconSvg(fileType: string): string {
+  const colors: Record<string, string> = {
+    video: "#9b59b6",
+    audio: "#1abc9c",
+    other: "#95a5a6",
+  };
+  const color = colors[fileType] || colors.other;
+  if (fileType === "video") {
+    return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`;
+  }
+  if (fileType === "audio") {
+    return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
+  }
+  return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+}
+
+function fileIconDataUri(fileType: string): string {
+  const svg = fileIconSvg(fileType);
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function bytesToBase64(bytes: number[] | Uint8Array): string {
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let binary = "";
+  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
+  return btoa(binary);
 }
 
 export default function MindMapCanvas({ onCreateInstance }: Props) {
@@ -28,6 +202,16 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
   const setMindInstance = useMindMapStore((s) => s.setMindInstance);
   const theme = useMindMapStore((s) => s.config?.ui.theme || "system");
   const needSync = useMindMapStore((s) => s.needStoreToMindSync);
+
+  // content 变化时(撤销/重做/外星更新),重渲染附件(因为 attached_file 可能变了)
+  useEffect(() => {
+    const inst = instanceRef.current;
+    if (!inst || !content) return;
+    setTimeout(() => {
+      const s = useMindMapStore.getState();
+      syncAttachedFiles(inst, s);
+    }, 100);
+  }, [content]);
 
   // 初始化 mind-elixir（仅 mount 一次）
   useEffect(() => {
@@ -49,6 +233,25 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       instanceRef.current = mind;
       onCreateInstance?.(mind);
       setMindInstance(mind);
+
+      // mind-elixir 5.14 的 selectNode 内部会直接覆盖 tpc 的 className(用 "selected" 替换)
+      // 导致我们手动加的 priority-p0/p1/p2/p3 class 丢失。
+      // hook 一下:调用前快照所有 priority class,调用后恢复。
+      const origSelectNode = (mind as any).selectNode?.bind(mind);
+      if (typeof origSelectNode === "function") {
+        (mind as any).selectNode = function (...args: any[]) {
+          const snapshot = new Map<HTMLElement, string>();
+          document.querySelectorAll<HTMLElement>("me-tpc[class*=priority-]").forEach((t) => {
+            const pCls = Array.from(t.classList).find((c) => /^priority-p[0-3]$/.test(c));
+            if (pCls) snapshot.set(t, pCls);
+          });
+          const r = origSelectNode(...args);
+          snapshot.forEach((cls, t) => {
+            if (!t.classList.contains(cls)) t.classList.add(cls);
+          });
+          return r;
+        };
+      }
       // dev 模式暴露到 window 便于调试
       if (import.meta.env.DEV) {
         (window as any).__mind = mind;
@@ -157,7 +360,16 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         for (const c of node.children || []) walk(c);
       };
       walk(state.content.root);
+      // 同步沙漏(基于全局 reminders)
+      syncHourglasses();
     }
+
+    // 遍历所有节点,根据 reminders 状态渲染沙漏图标到节点右上角外部
+    function syncHourglasses() {
+      syncHourglassesExternal(instanceRef.current, useMindMapStore.getState());
+    }
+
+    // === Fallback 事件处理 ===
 
     // === Fallback 事件处理 ===
     // mind-elixir 5.14 内部 Nt() 返回 noop（疑似打包 bug），
@@ -221,11 +433,32 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             !editTriggered;
 
           if (isDoubleClick) {
-            // 双击 → 进入编辑
-            editTriggered = true;
-            setTimeout(() => { editTriggered = false; }, 600);
-            inst.selectNode(tpc);
-            inst.beginEdit(tpc);
+            // 双击 → 如果节点有 attached_file,调用系统工具打开;否则进入编辑
+            const nodeId = (tpc as any).nodeObj?.id || tpc.getAttribute("data-nodeid");
+            const store = useMindMapStore.getState();
+            const filePath = store.filePath;
+            // 在 store.content 里找该节点的 attached_file
+            const findAttached = (n: any): any => {
+              if (n.id === nodeId) return n.attached_file;
+              for (const c of n.children || []) {
+                const r = findAttached(c);
+                if (r) return r;
+              }
+              return null;
+            };
+            const attached = store.content ? findAttached(store.content.root) : null;
+            if (attached && filePath) {
+              // 双击有附件 → 系统工具打开
+              (window as any).__TAURI_INTERNALS__?.invoke("open_attached_file", {
+                mmapPath: filePath, nodeId,
+              }).catch((e: any) => console.error("[打开附件] 失败", e));
+            } else {
+              // 双击无附件 → 编辑 topic
+              editTriggered = true;
+              setTimeout(() => { editTriggered = false; }, 600);
+              inst.selectNode(tpc);
+              inst.beginEdit(tpc);
+            }
           } else {
             // 单击 → 选中
             inst.selectNode(tpc);
@@ -246,6 +479,25 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         const inst = instanceRef.current;
         if (!inst) return;
         try {
+          // 节点有 attached_file → 系统工具打开;否则编辑
+          const nodeId = (tpc as any).nodeObj?.id || tpc.getAttribute("data-nodeid");
+          const store = useMindMapStore.getState();
+          const filePath = store.filePath;
+          const findAttached = (n: any): any => {
+            if (n.id === nodeId) return n.attached_file;
+            for (const c of n.children || []) {
+              const r = findAttached(c);
+              if (r) return r;
+            }
+            return null;
+          };
+          const attached = store.content ? findAttached(store.content.root) : null;
+          if (attached && filePath) {
+            (window as any).__TAURI_INTERNALS__?.invoke("open_attached_file", {
+              mmapPath: filePath, nodeId,
+            }).catch((err: any) => console.error("[dblclick 打开附件] 失败", err));
+            return;
+          }
           editTriggered = true;
           setTimeout(() => { editTriggered = false; }, 600);
           inst.selectNode(tpc);
@@ -625,6 +877,68 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           },
         });
 
+        // === 附件相关菜单项(仅当节点有 attached_file) ===
+        const store0 = useMindMapStore.getState();
+        const filePath = store0.filePath;
+        const findAttached = (n: any): any => {
+          if (n.id === nodeId) return n.attached_file;
+          for (const c of n.children || []) {
+            const r = findAttached(c);
+            if (r) return r;
+          }
+          return null;
+        };
+        const attached = store0.content && nodeId ? findAttached(store0.content.root) : null;
+        if (attached && filePath) {
+          addDivider();
+          addItem({
+            label: "📂 打开(系统工具)",
+            action: () => {
+              (window as any).__TAURI_INTERNALS__?.invoke("open_attached_file", {
+                mmapPath: filePath, nodeId,
+              }).catch((err: any) => console.error("[打开附件]", err));
+            },
+          });
+          addItem({
+            label: "🔍 在 Finder 中显示",
+            action: () => {
+              (window as any).__TAURI_INTERNALS__?.invoke("reveal_attached_file", {
+                mmapPath: filePath, nodeId,
+              }).catch((err: any) => console.error("[Finder 显示]", err));
+            },
+          });
+          addItem({
+            label: "🔄 替换附件...",
+            action: async () => {
+              try {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const sel = await open({ multiple: false });
+                if (typeof sel !== "string" || !sel) return;
+                await (window as any).__TAURI_INTERNALS__?.invoke("replace_attached_file", {
+                  mmapPath: filePath, nodeId, newSrc: sel,
+                });
+                // 触发 store 更新(通过 syncAttachedFiles 重渲染)
+                setTimeout(() => { (window as any).__syncAttachedFiles?.(); }, 100);
+              } catch (err) {
+                console.error("[替换附件]", err);
+              }
+            },
+          });
+          addItem({
+            label: "❌ 移除附件",
+            action: async () => {
+              try {
+                await (window as any).__TAURI_INTERNALS__?.invoke("remove_attached_file", {
+                  mmapPath: filePath, nodeId,
+                });
+                setTimeout(() => { (window as any).__syncAttachedFiles?.(); }, 100);
+              } catch (err) {
+                console.error("[移除附件]", err);
+              }
+            },
+          });
+        }
+
         // 定位（防止超出视口）
         const x = Math.min(e.clientX, window.innerWidth - 200);
         const y = Math.min(e.clientY, window.innerHeight - 200);
@@ -762,7 +1076,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       console.error("[store→mind sync] refresh 失败", e);
     }
     useMindMapStore.setState({ needStoreToMindSync: false });
-    // 撤销/重做后恢复优先级边框
+    // 撤销/重做后恢复优先级边框 + 沙漏
     setTimeout(() => {
       const inst = instanceRef.current;
       const state = useMindMapStore.getState();
@@ -778,8 +1092,40 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         for (const c of node.children || []) walk(c);
       };
       walk(state.content.root);
+      // 沙漏也需要重绘
+      syncHourglassesExternal(inst, state);
     }, 100);
   }, [needSync]);
+
+  // 全局 reminders 变化时,重绘画布沙漏
+  // 暴露 __syncHourglasses 到 window,store.setAllReminders 在更新后直接调用(避免 React 渲染周期时序问题)
+  useEffect(() => {
+    (window as any).__syncHourglasses = () => {
+      const inst = instanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!inst || !state.content) return 0;
+      syncHourglassesExternal(inst, state);
+      return document.querySelectorAll(".hourglass-wrapper").length;
+    };
+    (window as any).__syncAttachedFiles = () => {
+      const inst = instanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!inst || !state.content) return 0;
+      syncAttachedFiles(inst, state);
+      return document.querySelectorAll(".attached-render").length;
+    };
+    // mount 时立即跑一次(mind-elixir 已就绪的情况下)
+    const inst0 = instanceRef.current;
+    const state0 = useMindMapStore.getState();
+    if (inst0 && state0.content) {
+      syncHourglassesExternal(inst0, state0);
+      syncAttachedFiles(inst0, state0);
+    }
+    return () => {
+      delete (window as any).__syncHourglasses;
+      delete (window as any).__syncAttachedFiles;
+    };
+  }, []);
 
   // 明暗主题：给 .mind-elixir-inner 加/去 dark-theme class
   useEffect(() => {
