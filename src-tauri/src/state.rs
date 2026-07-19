@@ -91,6 +91,99 @@ impl AppState {
     }
 }
 
+/// 检测单个 reminder 是否是测试数据。
+///
+/// 测试代码的 reminder 有明显的标记特征:
+/// - source_file 是 "/tmp/test.mmap"(测试固定字符串)
+/// - title 是测试占位符("a", "b", "target", "t0-r0", "test-N", "state-N-r", "e2e-test-r1")
+/// - node_id 是 "node-1"(测试固定字符串)
+/// - trigger_at 是测试固定值 "2026-07-19T10:00:00"
+///
+/// 任何一条命中即认定为测试数据。
+pub fn is_test_reminder(r: &crate::models::Reminder) -> bool {
+    // source_file 标记
+    if r.source_file == "/tmp/test.mmap" {
+        return true;
+    }
+    // node_id 标记
+    if r.node_id == "node-1" {
+        return true;
+    }
+    // title 是已知测试占位符
+    let known_test_titles = [
+        "a", "b", "target",
+        "e2e-test-r1", "O场景-待删除",
+        "测试提醒", "测试",
+    ];
+    if known_test_titles.contains(&r.title.as_str()) {
+        return true;
+    }
+    // title 匹配测试模式(test-N / tN-rN / state-N-r)
+    if matches_test_title_pattern(&r.title) {
+        return true;
+    }
+    // trigger_at 是测试固定值
+    if r.trigger_at == "2026-07-19T10:00:00" {
+        return true;
+    }
+    false
+}
+
+fn matches_test_title_pattern(s: &str) -> bool {
+    // test-N (N 数字)
+    if let Some(rest) = s.strip_prefix("test-") {
+        if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+            return true;
+        }
+    }
+    // tN-rM (线程 ID + 序号)
+    if s.len() >= 4 && s.starts_with('t') {
+        let mid = &s[1..];
+        if let Some(idx) = mid.find("-r") {
+            let t_id = &mid[..idx];
+            let r_id = &mid[idx + 2..];
+            if !t_id.is_empty() && !r_id.is_empty()
+                && t_id.chars().all(|c| c.is_ascii_digit())
+                && r_id.chars().all(|c| c.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    // state-N-r
+    if s.starts_with("state-") && s.ends_with("-r") {
+        let mid = &s["state-".len()..s.len() - 2];
+        if !mid.is_empty() && mid.chars().all(|c| c.is_ascii_digit()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 扫描 ReminderIndex,过滤掉测试数据,返回干净版本。
+/// 如果有过滤(removed > 0),返回 Some((clean, removed_count)),
+/// 否则返回 None(无需清理)。
+pub fn filter_test_reminders(idx: &ReminderIndex) -> Option<(ReminderIndex, usize)> {
+    let original_count = idx.reminders.len();
+    let clean_reminders: Vec<_> = idx
+        .reminders
+        .iter()
+        .filter(|r| !is_test_reminder(r))
+        .cloned()
+        .collect();
+    let removed = original_count - clean_reminders.len();
+    if removed == 0 {
+        return None;
+    }
+    Some((
+        ReminderIndex {
+            version: idx.version.clone(),
+            reminders: clean_reminders,
+        },
+        removed,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,5 +397,112 @@ mod tests {
                 .unwrap();
             assert_eq!(id, format!("state-{}-r", idx));
         }
+    }
+}
+
+#[cfg(test)]
+mod test_detection_tests {
+    use super::*;
+    use crate::models::{Reminder, ReminderIndex};
+
+    fn make(id: &str, title: &str, source: &str, node: &str, trigger: &str) -> Reminder {
+        let mut r = Reminder::new(node, source, title, trigger);
+        r.id = id.to_string();
+        r
+    }
+
+    #[test]
+    fn detect_test_reminder_by_source_file() {
+        let r = make("x", "随便", "/tmp/test.mmap", "real-node", "2099-01-01T00:00:00");
+        assert!(is_test_reminder(&r), "source_file=/tmp/test.mmap 应识别为测试");
+    }
+
+    #[test]
+    fn detect_test_reminder_by_node_id() {
+        let r = make("x", "随便", "/real.mmap", "node-1", "2099-01-01T00:00:00");
+        assert!(is_test_reminder(&r), "node_id=node-1 应识别为测试");
+    }
+
+    #[test]
+    fn detect_test_reminder_by_known_title() {
+        for title in ["a", "b", "target", "e2e-test-r1", "O场景-待删除", "测试提醒", "测试"] {
+            let r = make("x", title, "/real.mmap", "real-node", "2099-01-01T00:00:00");
+            assert!(is_test_reminder(&r), "title={} 应识别为测试", title);
+        }
+    }
+
+    #[test]
+    fn detect_test_reminder_by_pattern_title() {
+        for title in ["test-0", "test-99", "t0-r0", "t9-r19", "state-0-r", "state-4-r"] {
+            let r = make("x", title, "/real.mmap", "real-node", "2099-01-01T00:00:00");
+            assert!(is_test_reminder(&r), "title={} 应识别为测试", title);
+        }
+    }
+
+    #[test]
+    fn detect_test_reminder_by_trigger_at() {
+        let r = make("x", "随便", "/real.mmap", "real-node", "2026-07-19T10:00:00");
+        assert!(is_test_reminder(&r), "trigger_at=测试固定时间 应识别为测试");
+    }
+
+    #[test]
+    fn do_not_false_positive_real_reminders() {
+        // 真实 reminder 的各种典型情况,不应被误判
+        let cases = vec![
+            // ("id", "title", "source", "node_id", "trigger_at")
+            make("uuid-1", "周会", "/Users/ss/docs/work.mmap", "abc-123", "2099-12-31T09:00:00"),
+            make("uuid-2", "复习 React", "/Users/ss/docs/learn.mmap", "node-xyz", "2099-11-01T20:00:00"),
+            make("uuid-3", "提交报告", "/Users/ss/docs/report.mmap", "real-id", "2099-10-15T14:30:00"),
+        ];
+        for r in cases {
+            assert!(!is_test_reminder(&r), "真实 reminder 不应被误判: {:?}", r);
+        }
+    }
+
+    #[test]
+    fn filter_removes_only_test_data() {
+        let idx = ReminderIndex {
+            version: "1.0.0".into(),
+            reminders: vec![
+                // 真实
+                make("uuid-1", "周会", "/work.mmap", "node-1-a", "2099-01-01T09:00:00"),
+                make("uuid-2", "学习", "/learn.mmap", "node-2-b", "2099-01-02T10:00:00"),
+                // 测试(各种标记)
+                make("test-a", "a", "/tmp/test.mmap", "node-1", "2026-07-19T10:00:00"),
+                make("test-b", "target", "/real.mmap", "node-1", "2099-01-01T09:00:00"),
+                make("test-c", "随便", "/tmp/test.mmap", "node-1", "2099-01-01T09:00:00"),
+                make("test-d", "test-42", "/real.mmap", "node-x", "2099-01-01T09:00:00"),
+                make("test-e", "t3-r5", "/real.mmap", "node-x", "2099-01-01T09:00:00"),
+            ],
+        };
+
+        let (clean, removed) = filter_test_reminders(&idx).expect("应有测试数据被清理");
+        assert_eq!(removed, 5, "应清理 5 个测试 reminder");
+        assert_eq!(clean.reminders.len(), 2, "应剩 2 个真实 reminder");
+        // 剩下的必须是真实的
+        for r in &clean.reminders {
+            assert!(!is_test_reminder(r), "清理后不应有任何测试 reminder");
+        }
+    }
+
+    #[test]
+    fn filter_returns_none_when_no_test_data() {
+        let idx = ReminderIndex {
+            version: "1.0.0".into(),
+            reminders: vec![
+                make("uuid-1", "周会", "/work.mmap", "node-1-a", "2099-01-01T09:00:00"),
+                make("uuid-2", "学习", "/learn.mmap", "node-2-b", "2099-01-02T10:00:00"),
+            ],
+        };
+        assert!(filter_test_reminders(&idx).is_none(), "无测试数据不应触发清理");
+    }
+
+    #[test]
+    fn filter_handles_empty_index() {
+        let idx = ReminderIndex {
+            version: "1.0.0".into(),
+            reminders: vec![],
+        };
+        assert!(filter_test_reminders(&idx).is_none(), "空 index 不应触发清理");
     }
 }

@@ -8,7 +8,7 @@
 | 层级 | 工具 | 状态 |
 |------|------|------|
 | 单元（前端） | vitest + @testing-library | 238 通过 |
-| 单元（Rust） | cargo test | 91 通过 |
+| 单元（Rust） | cargo test | 100 通过 |
 | 集成（Rust） | cargo test --test integration | 17 通过 |
 | 类型检查 | tsc --noEmit | ✅ 0 错误 |
 | E2E（Chromium） | CDP + Tauri mock 注入 | 50 场景通过 |

@@ -64,10 +64,36 @@ pub fn run() {
             // === 初始化全局共享状态(AppState) ===
             // 关键:用于避免 reminder 调度器和 commands 之间的写写冲突
             // 启动时加载 reminders.json 到内存,后续所有读写走 Mutex 串行化
-            let initial_reminders = config::load_reminders().unwrap_or_else(|e| {
+            let mut initial_reminders = config::load_reminders().unwrap_or_else(|e| {
                 eprintln!("[mindmap] 加载 reminders.json 失败,使用空集合: {}", e);
                 crate::models::ReminderIndex { version: "1.0.0".into(), reminders: vec![] }
             });
+
+            // === 清理测试数据污染(自动检测 + 备份) ===
+            // 历史问题:测试代码曾通过 set_var + save_reminders 把 100+ 测试 reminder
+            // 写到了真实 ~/Library/.../reminders.json。这里在启动时自动扫描,
+            // 发现测试标记字符串(source_file="/tmp/test.mmap", title="a"/"target" 等)
+            // 就备份原文件 + 用过滤后的干净数据启动。
+            if let Some((clean, removed)) = state::filter_test_reminders(&initial_reminders) {
+                eprintln!(
+                    "[mindmap] 检测到 {} 个测试残留 reminder,自动清理",
+                    removed
+                );
+                // 备份原文件(防止误删,便于追溯)
+                if let Ok(path) = config::reminders_path() {
+                    if path.exists() {
+                        let backup = path.with_extension("json.polluted-backup");
+                        let _ = std::fs::rename(&path, &backup);
+                        eprintln!("[mindmap] 原文件已备份到 {}", backup.display());
+                    }
+                }
+                // 用干净数据覆盖写盘
+                if let Err(e) = config::save_reminders(&clean) {
+                    eprintln!("[mindmap] 清理后写盘失败: {}", e);
+                }
+                initial_reminders = clean;
+            }
+
             app.manage(state::AppState::new(initial_reminders));
 
             // === 启动提醒调度器（后台线程，30s 轮询）===
