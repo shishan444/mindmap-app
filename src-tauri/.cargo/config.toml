@@ -1,5 +1,0 @@
-# 串行化所有测试
-# 原因:多个测试模块(dev_logger/state/config)依赖 MINDMAP_TEST_DATA_DIR 环境变量
-# 并发跑会导致 set_var 互相覆盖 + 文件操作 race,触发 false positive 失败
-[env]
-RUST_TEST_THREADS = "1"
