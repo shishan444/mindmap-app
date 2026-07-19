@@ -76,7 +76,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex as StdMutex;
 
-    static TEST_LOCK: StdMutex<()> = StdMutex::new(());
+    pub(crate) static TEST_LOCK: StdMutex<()> = StdMutex::new(());
 
     /// 获取测试用全局锁，让 dev_logger 测试串行（避免 env var + Mutex 状态污染）
     /// Guard 返回 'static lifetime（unsafe transmute，但测试用安全）

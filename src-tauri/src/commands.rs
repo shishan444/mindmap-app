@@ -435,34 +435,47 @@ pub fn import_opml_string(opml: String) -> Result<Content> {
 // ===== Reminder CRUD (Phase 11.5) =====
 
 #[tauri::command]
-pub fn get_reminders() -> Result<ReminderIndex> {
-    crate::config::load_reminders()
+pub fn get_reminders(state: tauri::State<'_, crate::state::AppState>) -> Result<ReminderIndex> {
+    state.read_reminders(|idx| idx.clone())
 }
 
 #[tauri::command]
-pub fn upsert_reminder(reminder: Reminder) -> Result<ReminderIndex> {
-    let mut idx = crate::config::load_reminders()?;
-    idx.add_or_replace(reminder);
-    crate::config::save_reminders(&idx)?;
-    Ok(idx)
+pub fn upsert_reminder(
+    reminder: Reminder,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<ReminderIndex> {
+    state.modify_reminders(|idx| {
+        idx.add_or_replace(reminder);
+        Ok(())
+    })?;
+    // 返回最新副本
+    state.read_reminders(|idx| idx.clone())
 }
 
 #[tauri::command]
-pub fn delete_reminder(id: String) -> Result<ReminderIndex> {
-    let mut idx = crate::config::load_reminders()?;
-    idx.remove(&id);
-    crate::config::save_reminders(&idx)?;
-    Ok(idx)
+pub fn delete_reminder(
+    id: String,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<ReminderIndex> {
+    state.modify_reminders(|idx| {
+        idx.remove(&id);
+        Ok(())
+    })?;
+    state.read_reminders(|idx| idx.clone())
 }
 
 #[tauri::command]
-pub fn get_reminders_for_node(node_id: String) -> Result<Vec<Reminder>> {
-    let idx = crate::config::load_reminders()?;
-    Ok(idx
-        .reminders
-        .into_iter()
-        .filter(|r| r.node_id == node_id)
-        .collect())
+pub fn get_reminders_for_node(
+    node_id: String,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<Vec<Reminder>> {
+    Ok(state.read_reminders(|idx| {
+        idx.reminders
+            .iter()
+            .filter(|r| r.node_id == node_id)
+            .cloned()
+            .collect()
+    })?)
 }
 
 // ===== 开发模式日志（Phase 12）=====

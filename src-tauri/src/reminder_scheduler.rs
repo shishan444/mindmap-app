@@ -23,58 +23,58 @@ pub fn spawn(app: AppHandle) {
 }
 
 fn poll_once(app: &AppHandle) -> Result<(), String> {
-    let idx = crate::config::load_reminders().map_err(|e| e.to_string())?;
+    use tauri::Manager;
+    let state = app.state::<crate::state::AppState>();
     let now = Local::now();
-    let mut dirty = false;
     let mut triggered: Vec<Reminder> = Vec::new();
 
-    for r in idx.reminders.iter() {
-        if !r.enabled {
-            continue;
-        }
-        // 检查触发时间
-        let should_fire = match parse_local_time(&r.trigger_at) {
-            Some(t) => t <= now,
-            None => false,
-        };
-        if !should_fire {
-            continue;
-        }
-        // 已触发过且 1 分钟内不再重复触发
-        if let Some(last) = r.last_triggered_at.as_ref() {
-            if let Some(last_dt) = parse_local_time(last) {
-                let elapsed = now.signed_duration_since(last_dt);
-                if elapsed.num_minutes() < 1 {
+    // 关键:整个 load → check → modify → save 在同一个 Mutex 锁内完成
+    // 避免与 commands::delete_reminder / upsert_reminder 之间的写写冲突
+    state
+        .modify_reminders(|idx| {
+            for r in idx.reminders.iter() {
+                if !r.enabled {
                     continue;
                 }
+                let should_fire = match parse_local_time(&r.trigger_at) {
+                    Some(t) => t <= now,
+                    None => false,
+                };
+                if !should_fire {
+                    continue;
+                }
+                // 已触发过且 1 分钟内不再重复触发
+                if let Some(last) = r.last_triggered_at.as_ref() {
+                    if let Some(last_dt) = parse_local_time(last) {
+                        let elapsed = now.signed_duration_since(last_dt);
+                        if elapsed.num_minutes() < 1 {
+                            continue;
+                        }
+                    }
+                }
+                // 收集触发的(后面 emit)
+                let mut fired = r.clone();
+                fired.last_triggered_at = Some(now.format("%Y-%m-%dT%H:%M:%S").to_string());
+                fired.next_trigger_at = compute_next_trigger(&fired, now);
+                triggered.push(fired);
             }
-        }
 
-        // 触发！
-        let mut triggered_reminder = r.clone();
-        triggered_reminder.last_triggered_at = Some(now.format("%Y-%m-%dT%H:%M:%S").to_string());
-        triggered_reminder.next_trigger_at = compute_next_trigger(&triggered_reminder, now);
-        triggered.push(triggered_reminder);
-        dirty = true;
-    }
-
-    if dirty {
-        // 写回（更新 last_triggered_at 等）
-        let mut new_idx = idx.clone();
-        for fired in &triggered {
-            if let Some(slot) = new_idx.reminders.iter_mut().find(|r| r.id == fired.id) {
-                *slot = fired.clone();
+            // 在锁内更新触发的 reminder(last_triggered_at / next_trigger_at)
+            for fired in &triggered {
+                if let Some(slot) = idx.reminders.iter_mut().find(|r| r.id == fired.id) {
+                    slot.last_triggered_at = fired.last_triggered_at.clone();
+                    slot.next_trigger_at = fired.next_trigger_at.clone();
+                }
             }
-        }
-        if let Err(e) = crate::config::save_reminders(&new_idx) {
-            eprintln!("[reminder-scheduler] save error: {}", e);
-        }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
 
-        // emit 事件给前端 + 发系统通知（macOS 通知中心）
+    // emit + 系统通知在锁外(避免长时间持锁)
+    if !triggered.is_empty() {
+        let enabled = read_system_notification_enabled(app);
         for r in &triggered {
             let _ = app.emit("reminder-triggered", r.clone());
-            // 系统通知（用户可在偏好设置中关闭）
-            let enabled = read_system_notification_enabled(app);
             if enabled {
                 let mut builder = app.notification().builder().title(&r.title);
                 if let Some(msg) = r.message.as_ref() {

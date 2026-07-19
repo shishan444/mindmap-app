@@ -8,12 +8,31 @@ pub mod models;
 pub mod opml;
 pub mod reminder_scheduler;
 pub mod freemind;
+pub mod state;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WindowEvent,
 };
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::Mutex as StdMutex;
+    /// 全局测试锁,串行化所有依赖 MINDMAP_TEST_DATA_DIR 的测试
+    /// (避免多线程跑测试时 env var + 文件操作相互干扰)
+    pub(crate) static ENV_TEST_LOCK: StdMutex<()> = StdMutex::new(());
+
+    pub(crate) fn lock_env_test() -> std::sync::MutexGuard<'static, ()> {
+        // SAFETY: 测试间没有 'static 数据依赖
+        unsafe {
+            std::mem::transmute::<
+                std::sync::MutexGuard<'_, ()>,
+                std::sync::MutexGuard<'static, ()>,
+            >(ENV_TEST_LOCK.lock().unwrap())
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +60,15 @@ pub fn run() {
 
             // === 创建托盘 ===
             setup_tray(app)?;
+
+            // === 初始化全局共享状态(AppState) ===
+            // 关键:用于避免 reminder 调度器和 commands 之间的写写冲突
+            // 启动时加载 reminders.json 到内存,后续所有读写走 Mutex 串行化
+            let initial_reminders = config::load_reminders().unwrap_or_else(|e| {
+                eprintln!("[mindmap] 加载 reminders.json 失败,使用空集合: {}", e);
+                crate::models::ReminderIndex { version: "1.0.0".into(), reminders: vec![] }
+            });
+            app.manage(state::AppState::new(initial_reminders));
 
             // === 启动提醒调度器（后台线程，30s 轮询）===
             reminder_scheduler::spawn(app.handle().clone());

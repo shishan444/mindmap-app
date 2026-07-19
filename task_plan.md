@@ -111,6 +111,7 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 | 拖动子树脱离 | WebKit mouseup e.target 不对 | elementFromPoint 替代 |
 | 撤销不生效 | store→mind 反向同步缺失 | needStoreToMindSync + mind.refresh |
 | 切换节点后 priority 视觉标记丢失 | 1. store 扩展字段未同步到 mind nodeObj；2. mind-elixir selectNode 内部用 `className=` 直接覆盖（不是 classList.add），priority-p0 class 被 "selected" 替换掉 | 1. `updateSelectedNode` 调用 `syncToMindNodeObj` 把 priority/note/reminder_ids/style 同步到 nodeObj；2. MindMapCanvas 在 init 后 hook `mind.selectNode`，调用前快照 priority class，调用后恢复 |
+| 删除提醒后依然会触发 | reminder_scheduler 与 commands::delete_reminder 各自走 `load → modify → save`,非原子。调度器 load V1(含 A)→ 用户删除 save V2(不含 A)→ 调度器 save 基于 V1 的修改版(含 A)→ **A 又被写回 reminders.json** | 引入 `AppState(Mutex<ReminderIndex>)` 作为单一数据源,所有读写通过 Mutex 串行化;启动时 load 一次到内存,save 命令/调度器都用 state.modify_reminders 闭包操作 |
 
 ---
 
@@ -118,12 +119,12 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 
 ```
 ✓ 前端单元（vitest）        238
-✓ Rust 单元（cargo test）    88
+✓ Rust 单元（cargo test）    89
 ✓ Rust 集成                  17
 ✓ TypeScript 类型检查       0 错误
 ✓ E2E 真实 CDP 事件 + Tauri mock 注入   46
 ─────────────────────────────────
-✓ 合计                      389
+✓ 合计                      390
 ```
 
 ### E2E 验证方式
