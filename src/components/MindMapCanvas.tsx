@@ -1133,13 +1133,16 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         const dx = (innerRect.x + innerRect.width / 2) - (nodeRect.x + nodeRect.width / 2);
         const dy = (innerRect.y + innerRect.height / 2) - (nodeRect.y + nodeRect.height / 2);
         if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return true;
-        // 解析当前 transform: translate3d(Xpx, Ypx, 0px) scale(S)
-        const t = mapCanvas.style.transform || "";
-        const m = t.match(/translate3d\(\s*([-\d.]+)px[\s,]+([-\d.]+)px/);
-        const curX = m ? parseFloat(m[1]) : 0;
-        const curY = m ? parseFloat(m[2]) : 0;
-        const scaleMatch = t.match(/scale\(\s*([\d.]+)\s*\)/);
-        const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+        // 用 getComputedStyle 解析 transform matrix(更稳健,不依赖字符串格式)
+        // mind-elixir 可能用 translate3d / matrix3d / 等多种格式
+        const ts = window.getComputedStyle(mapCanvas).transform;
+        let curX = 0, curY = 0, scale = 1;
+        if (ts && ts !== "none") {
+          const m = new DOMMatrix(ts);
+          curX = m.e;  // translate X
+          curY = m.f;  // translate Y
+          scale = m.a;  // scale X (= m11)
+        }
         // 保持当前 scale(用户主动调的缩放不应被覆盖)
         mapCanvas.style.transform = `translate3d(${curX + dx}px, ${curY + dy}px, 0px) scale(${scale})`;
         return true;

@@ -125,8 +125,9 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 ✓ Rust 集成                  17
 ✓ TypeScript 类型检查       0 错误
 ✓ E2E 真实 CDP 事件 + Tauri mock 注入   56
+✓ E2E 人类模拟(真实鼠标轨迹 + 逐字符按键)   7
 ─────────────────────────────────
-✓ 合计                      411
+✓ 合计                      418
 ```
 
 ### E2E 验证方式
@@ -136,3 +137,11 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 - **真实事件**：`Input.dispatchKeyEvent` (rawKeyDown/keyUp) + `Input.dispatchMouseEvent` + `Input.insertText`
 - **场景覆盖**：启动渲染 / Tab 多级创建 / F2 编辑 / 优先级 P0 视觉标记（CSS class + ::before SVG）/ 撤销重做 / Enter 兄弟节点 / Tab 切换 / 搜索 / 偏好设置（含 Esc 关闭）/ Delete 删除
 - **样式验证**：`window.getComputedStyle(el, "::before")` 直接读取伪元素 border / left / width / background-image
+
+### 人类模拟验证(human-sim.mjs)
+
+- **真实鼠标轨迹**:`humanMove` 用 12 步 mouseMoved 线性插值 + 微抖动(±0.4px)模拟物理移动
+- **真实按键**:`humanType` 逐字符 dispatchKeyEvent,带 `text` 字段产生真实字符(非一次性 insertText)
+- **真实点击**:hover → mousePressed → mouseReleased,带随机延迟(100-300ms 反应时间)
+- **截图验证**:每个场景后 `Page.captureScreenshot` 保存 PNG 到 `/Users/ss/works/tmp/24071720-e2e回归/`
+- **覆盖**:H1 新建 / H2 Tab 创建 / H3 F2+逐字符输入 / H4 添加 reminder(真实点击+输入) / H5 ✏️ 编辑 reminder(本轮新加) / H6 centerNode 居中(误差 dx=0 dy=0) / H7 P0 优先级

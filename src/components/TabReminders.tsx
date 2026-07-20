@@ -10,7 +10,7 @@ export default function TabReminders() {
   const filePath = useMindMapStore((s) => s.filePath);
   const setAllReminders = useMindMapStore((s) => s.setAllReminders);
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  // editingId: null=添加模式, string=编辑该 id 的 reminder
+  // editingId: null=不显示表单, "new"=添加模式, string=编辑该 id 的 reminder
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState({
     title: "",
@@ -31,9 +31,9 @@ export default function TabReminders() {
   if (!content) return <div className="tab-empty">未打开文档</div>;
   if (!selectedId) return <div className="tab-empty">未选中节点</div>;
 
-  // 进入"添加"模式:清空 draft
+  // 进入"添加"模式:清空 draft,editingId="new"
   const startAdd = () => {
-    setEditingId(null);
+    setEditingId("new");
     setDraft({ title: "", trigger_at: defaultTrigger(), repeat: "none" });
   };
 
@@ -75,7 +75,7 @@ export default function TabReminders() {
         : null;
 
     let reminder: Reminder;
-    if (editingId) {
+    if (editingId && editingId !== "new") {
       // 编辑模式:保留 id / created_at / enabled,改其他字段
       const existing = reminders.find((r) => r.id === editingId);
       if (!existing) return;
@@ -117,7 +117,7 @@ export default function TabReminders() {
       setAllReminders(idx.reminders);
       handleCancel();
     } catch (e) {
-      alert(editingId ? "修改提醒失败: " + e : "添加提醒失败: " + e);
+      alert(editingId && editingId !== "new" ? "修改提醒失败: " + e : "添加提醒失败: " + e);
     }
   };
 
@@ -187,7 +187,7 @@ export default function TabReminders() {
               onClick={handleSave}
               disabled={!draft.title}
             >
-              {editingId && reminders.find((r) => r.id === editingId) ? "保存修改" : "保存"}
+              {editingId && editingId !== "new" && reminders.find((r) => r.id === editingId) ? "保存修改" : "保存"}
             </button>
           </div>
         </div>
