@@ -1114,6 +1114,40 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       syncAttachedFiles(inst, state);
       return document.querySelectorAll(".attached-render").length;
     };
+    // 居中跳转到指定节点(供 ReminderToast 调用)
+    // 直接操作 mapCanvas 的 transform,把目标节点的中心对齐到容器中心
+    (window as any).__centerNode = (nodeId: string): boolean => {
+      const inst = instanceRef.current;
+      if (!inst) return false;
+      try {
+        const tpc = typeof inst.findEle === "function" ? inst.findEle(nodeId) : null;
+        if (!tpc) return false;
+        // 先选中(高亮)
+        try { inst.selectNode(tpc); } catch {}
+        const inner = containerRef.current;
+        const mapCanvas = inner?.querySelector(".map-canvas") as HTMLElement | null;
+        if (!inner || !mapCanvas) return false;
+        const innerRect = inner.getBoundingClientRect();
+        const nodeRect = tpc.getBoundingClientRect();
+        // 目标:把 nodeRect 中心对齐到 innerRect 中心
+        const dx = (innerRect.x + innerRect.width / 2) - (nodeRect.x + nodeRect.width / 2);
+        const dy = (innerRect.y + innerRect.height / 2) - (nodeRect.y + nodeRect.height / 2);
+        if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return true;
+        // 解析当前 transform: translate3d(Xpx, Ypx, 0px) scale(S)
+        const t = mapCanvas.style.transform || "";
+        const m = t.match(/translate3d\(\s*([-\d.]+)px[\s,]+([-\d.]+)px/);
+        const curX = m ? parseFloat(m[1]) : 0;
+        const curY = m ? parseFloat(m[2]) : 0;
+        const scaleMatch = t.match(/scale\(\s*([\d.]+)\s*\)/);
+        const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+        // 保持当前 scale(用户主动调的缩放不应被覆盖)
+        mapCanvas.style.transform = `translate3d(${curX + dx}px, ${curY + dy}px, 0px) scale(${scale})`;
+        return true;
+      } catch (e) {
+        console.error("[MindMapCanvas] centerNode 失败", e);
+        return false;
+      }
+    };
     // mount 时立即跑一次(mind-elixir 已就绪的情况下)
     const inst0 = instanceRef.current;
     const state0 = useMindMapStore.getState();
@@ -1124,6 +1158,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     return () => {
       delete (window as any).__syncHourglasses;
       delete (window as any).__syncAttachedFiles;
+      delete (window as any).__centerNode;
     };
   }, []);
 

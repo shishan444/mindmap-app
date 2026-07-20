@@ -47,24 +47,32 @@ export default function ReminderToast() {
       // 不跨文件 — 静默忽略
       return;
     }
+    // 用 __centerNode(MindMapCanvas 暴露),让节点真正居中到画布中央
+    // 而不是 mind.focusNode(mind-elixir 5.14 该 API 可能只是"滚到可见",不真居中)
+    const centerFn = (window as any).__centerNode;
+    if (typeof centerFn === "function") {
+      const ok = centerFn(reminder.node_id);
+      if (ok) {
+        // 触发跳转后,刷新 reminders 缓存(可能用户已读)
+        try {
+          const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
+          useMindMapStore.getState().setAllReminders(idx.reminders || []);
+        } catch {}
+        return;
+      }
+    }
+    // fallback:mind.focusNode
     const mind = useMindMapStore.getState().mindInstance;
     if (!mind) return;
-    // node_id 在 DOM 上有 "me" 前缀(mind-elixir 内部)
     const tpc =
       (typeof mind.findEle === "function" && mind.findEle(reminder.node_id)) || null;
     if (!tpc) return;
     try {
       if (mind.selectNode) mind.selectNode(tpc);
       if (mind.focusNode) mind.focusNode(tpc);
-      else if (mind.scrollIntoView) mind.scrollIntoView(tpc);
     } catch (e) {
       console.error("[ReminderToast] 跳转失败", e);
     }
-    // 触发跳转后,刷新 reminders 缓存(可能用户已读)
-    try {
-      const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
-      useMindMapStore.getState().setAllReminders(idx.reminders || []);
-    } catch {}
   };
 
   // 自动 8 秒后消失

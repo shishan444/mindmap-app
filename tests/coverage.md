@@ -11,7 +11,7 @@
 | 单元（Rust） | cargo test | 100 通过 |
 | 集成（Rust） | cargo test --test integration | 17 通过 |
 | 类型检查 | tsc --noEmit | ✅ 0 错误 |
-| E2E（Chromium） | CDP + Tauri mock 注入 | 50 场景通过 |
+| E2E（Chromium） | CDP + Tauri mock 注入 | 56 场景通过 |
 | WebKit（Tauri） | 用户验证 | ✅ 核心路径 |
 
 ---
@@ -141,5 +141,11 @@
 | O2-删除 | 删除后 store 不含该 reminder | invoke delete + filter | ✅ |
 | O3-不复活 | 调度器 poll 后 reminder 不复活(防 race condition 回归) | invoke get_reminders | ✅ |
 | O4-沙漏 | 删除后画布沙漏数量减少 | DOM querySelector | ✅ |
+| P1-添加 | reminder 创建写入 store | invoke upsert | ✅ |
+| P2-编辑按钮 | reminder 列表渲染 ✏️ 编辑按钮 | DOM 验证 | ✅ |
+| P3-编辑生效 | 二次编辑改 title 生效(id 不变) | invoke upsert + store 验证 | ✅ |
+| Q1-API | window.__centerNode 函数暴露 | typeof 验证 | ✅ |
+| Q2-调用 | centerNode 调用返回成功 | boolean 返回值 | ✅ |
+| Q3-居中 | 节点居中到容器中心(误差 ≤5px) | getBoundingClientRect 算 dx/dy | ✅ dx=0,dy=0 |
 | K1 | store 状态可读（dirty/saveStatus/history） | evaluate | ✅ past=30 |
 | L1 | Delete 删除节点 | rawKeyDown | ✅ 5→4 |

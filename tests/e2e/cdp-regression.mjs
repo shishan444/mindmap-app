@@ -744,6 +744,115 @@ const o4Hourglass = await c.evaluate(`(function(){
 // 这里只验证不超过 1(因为可能有其他 reminder 残留,但本场景添加的已删)
 record("O4-沙漏", "删除 reminder 后画布沙漏数量", o4Hourglass <= 1, `数量=${o4Hourglass}`);
 
+// === P. reminder 二次编辑(本轮新加功能) ===
+console.log("\n=== P. reminder 二次编辑 ===");
+// 切到"提醒" tab
+await c.evaluate(`(function(){
+  const tabs = Array.from(document.querySelectorAll(".sidebar-tab"));
+  const t = tabs.find(t => /提醒/.test(t.textContent || ""));
+  if (t) t.click();
+})()`);
+await sleep(300);
+
+// 给当前节点添加一个 reminder
+const pTargetId = await c.evaluate(`window.__store?.getState?.().selectedNodeId`);
+const pFuture = new Date(Date.now() + 60 * 60 * 1000);
+const padP = n => String(n).padStart(2, "0");
+const pTrigger1 = `${pFuture.getFullYear()}-${padP(pFuture.getMonth()+1)}-${padP(pFuture.getDate())}T${padP(pFuture.getHours())}:${padP(pFuture.getMinutes())}:00`;
+await c.evaluate(`(async function(){
+  const reminder = {
+    id: "p-edit-test-r1", node_id: ${JSON.stringify(pTargetId)}, source_file: "",
+    title: "原标题", message: null, trigger_at: ${JSON.stringify(pTrigger1)},
+    repeat_rule: null, priority: null, enabled: true, status: "pending",
+    last_triggered_at: null, snoozed_until: null, next_trigger_at: ${JSON.stringify(pTrigger1)},
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  };
+  const idx = await window.__TAURI_INTERNALS__.invoke("upsert_reminder", { reminder });
+  window.__store.getState().setAllReminders(idx.reminders || []);
+})()`);
+await sleep(500);
+
+// 验证 reminder 已加入
+const p1Count = await c.evaluate(`window.__store.getState().allReminders.filter(r => r.id === "p-edit-test-r1").length`);
+record("P1-添加", "reminder 加入", p1Count === 1);
+
+// 点 ✏️ 编辑按钮(切到面板里有这个 reminder)
+await c.evaluate(`(function(){
+  const tabs = Array.from(document.querySelectorAll(".sidebar-tab"));
+  const t = tabs.find(t => /面板/.test(t.textContent || ""));
+  if (t) t.click();
+})()`);
+await sleep(300);
+await c.evaluate(`(function(){
+  const tabs = Array.from(document.querySelectorAll(".sidebar-tab"));
+  const t = tabs.find(t => /提醒/.test(t.textContent || ""));
+  if (t) t.click();
+})()`);
+await sleep(300);
+
+// 检查 reminder 列表是否有 ✏️ 编辑按钮
+const p2HasEditBtn = await c.evaluate(`(function(){
+  // 在提醒 tab 里找带 ✏️ 或 "编辑" title 的按钮
+  const btns = Array.from(document.querySelectorAll(".tab-reminders button"));
+  return btns.some(b => /✏️|编辑/.test(b.title + b.textContent));
+})()`);
+record("P2-编辑按钮", "reminder 列表有 ✏️ 编辑按钮", p2HasEditBtn);
+
+// 通过 invoke 模拟"编辑"(直接调 upsert,保留 id,改 title)
+const pFuture2 = new Date(Date.now() + 2 * 60 * 60 * 1000);
+const pTrigger2 = `${pFuture2.getFullYear()}-${padP(pFuture2.getMonth()+1)}-${padP(pFuture2.getDate())}T${padP(pFuture2.getHours())}:${padP(pFuture2.getMinutes())}:00`;
+await c.evaluate(`(async function(){
+  const existing = window.__store.getState().allReminders.find(r => r.id === "p-edit-test-r1");
+  if (!existing) return;
+  const updated = { ...existing, title: "编辑后标题", trigger_at: ${JSON.stringify(pTrigger2)}, next_trigger_at: ${JSON.stringify(pTrigger2)}, status: "pending", last_triggered_at: null, updated_at: new Date().toISOString() };
+  const idx = await window.__TAURI_INTERNALS__.invoke("upsert_reminder", { reminder: updated });
+  window.__store.getState().setAllReminders(idx.reminders || []);
+})()`);
+await sleep(500);
+
+const p3Title = await c.evaluate(`window.__store.getState().allReminders.find(r => r.id === "p-edit-test-r1")?.title`);
+record("P3-编辑生效", "编辑后 title 改为 '编辑后标题'", p3Title === "编辑后标题", `实际 title=${p3Title}`);
+
+// 清理
+await c.evaluate(`(async function(){
+  const idx = await window.__TAURI_INTERNALS__.invoke("delete_reminder", { id: "p-edit-test-r1" });
+  window.__store.getState().setAllReminders(idx.reminders || []);
+})()`);
+
+// === Q. centerNode 居中跳转(本轮新加功能) ===
+console.log("\n=== Q. centerNode 居中跳转 ===");
+// __centerNode 函数应存在
+const q1FnExists = await c.evaluate(`typeof window.__centerNode === "function"`);
+record("Q1-API", "window.__centerNode 函数暴露", q1FnExists);
+
+// 创建子节点,然后调用 __centerNode,验证节点居中
+const qRoot = await c.evaluate(`window.__store?.getState?.().content?.root?.id`);
+const qResult = await c.evaluate(`(function(){
+  const fn = window.__centerNode;
+  if (typeof fn !== "function") return { ok: false, reason: "no fn" };
+  const ok = fn(${JSON.stringify(qRoot)});
+  // 检查根节点位置 vs 容器中心
+  const inner = document.querySelector(".mind-elixir-inner") || document.querySelector(".map-container");
+  const meRoot = document.querySelector("me-root");
+  if (!inner || !meRoot) return { ok, noDom: true };
+  const innerRect = inner.getBoundingClientRect();
+  const rootRect = meRoot.getBoundingClientRect();
+  const innerCx = innerRect.x + innerRect.width / 2;
+  const innerCy = innerRect.y + innerRect.height / 2;
+  const rootCx = rootRect.x + rootRect.width / 2;
+  const rootCy = rootRect.y + rootRect.height / 2;
+  const dx = Math.abs(innerCx - rootCx);
+  const dy = Math.abs(innerCy - rootCy);
+  return {
+    ok,
+    dx: Math.round(dx),
+    dy: Math.round(dy),
+    centered: dx <= 5 && dy <= 5,
+  };
+})()`);
+record("Q2-调用", "centerNode 返回成功", qResult.ok, JSON.stringify(qResult));
+record("Q3-居中", "节点居中到容器中心(误差≤5px)", qResult.centered === true, `dx=${qResult.dx}, dy=${qResult.dy}`);
+
 // === 汇总 ===
 console.log("\n=== 汇总 ===");
 const passed = results.filter((r) => r.ok).length;
