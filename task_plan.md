@@ -124,10 +124,10 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 ✓ Rust 单元（cargo test）    100
 ✓ Rust 集成                  17
 ✓ TypeScript 类型检查       0 错误
-✓ E2E 真实 CDP 事件 + Tauri mock 注入   56
+✓ E2E 真实 CDP 事件 + Tauri mock 注入   57
 ✓ E2E 人类模拟(真实鼠标轨迹 + 逐字符按键 + Tauri event mock)   10
 ─────────────────────────────────
-✓ 合计                      421
+✓ 合计                      422
 ```
 
 ### E2E 验证方式

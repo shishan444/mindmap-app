@@ -325,6 +325,8 @@ const priorityCheck = await c.evaluate(`(function(){
     hasClass: true,
     border: cs.border,
     borderColor: cs.borderColor,
+    borderLeftWidth: cs.borderLeftWidth,
+    boxShadow: cs.boxShadow ? cs.boxShadow.substring(0, 50) : "none",
     beforeContent: before.content,
     beforeBgImage: (before.backgroundImage || "").substring(0, 60),
     beforeLeft: before.left,
@@ -332,7 +334,8 @@ const priorityCheck = await c.evaluate(`(function(){
   };
 })()`);
 record("D-类", "节点应用 priority-p0 类", priorityCheck.hasClass);
-record("D-边框", "全包围边框生效", priorityCheck.hasClass && priorityCheck.border && !priorityCheck.border.includes("0px"), priorityCheck.border);
+record("D-边框", "P0 边框 5px 加粗生效", priorityCheck.hasClass && priorityCheck.borderLeftWidth === "5px", `width=${priorityCheck.borderLeftWidth}, border=${priorityCheck.border}`);
+record("D-发光", "P0 红色发光阴影", priorityCheck.hasClass && priorityCheck.boxShadow && priorityCheck.boxShadow.includes("231"), `shadow=${priorityCheck.boxShadow}`);
 record("D-图标", "::before 图标已注入", priorityCheck.hasClass && priorityCheck.beforeContent && priorityCheck.beforeContent !== "none", `${priorityCheck.beforeLeft} / ${priorityCheck.beforeWidth} / ${priorityCheck.beforeBgImage}`);
 
 // 清除 P0

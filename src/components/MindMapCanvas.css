@@ -132,19 +132,37 @@
   background: #1a1a2e;
 }
 
-/* === 优先级视觉标记：全包围彩色边框 + 边框外左侧图标 === */
-.mind-elixir-inner me-tpc.priority-p0,
-.mind-elixir-inner me-tpc.priority-p1,
-.mind-elixir-inner me-tpc.priority-p2,
-.mind-elixir-inner me-tpc.priority-p3 {
-  border-width: 2px !important;
+/* === 优先级视觉标记:全包围彩色边框 + 边框外左侧图标 === */
+/* 梯度加粗 + P0 红色发光:让 P0/P1/P2/P3 视觉差异一眼可辨 */
+
+/* P0 紧急:5px 实线红 + 红色发光阴影(警示感最强) */
+.mind-elixir-inner me-tpc.priority-p0 {
+  border-width: 5px !important;
   border-style: solid !important;
+  border-color: #e74c3c !important;
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.35), 0 0 12px rgba(231, 76, 60, 0.6) !important;
 }
 
-.mind-elixir-inner me-tpc.priority-p0 { border-color: #e74c3c !important; }
-.mind-elixir-inner me-tpc.priority-p1 { border-color: #f39c12 !important; }
-.mind-elixir-inner me-tpc.priority-p2 { border-color: #3b82f6 !important; }
-.mind-elixir-inner me-tpc.priority-p3 { border-color: #95a5a6 !important; }
+/* P1 高:4px 实线橙 */
+.mind-elixir-inner me-tpc.priority-p1 {
+  border-width: 4px !important;
+  border-style: solid !important;
+  border-color: #f39c12 !important;
+}
+
+/* P2 中:3px 实线蓝 */
+.mind-elixir-inner me-tpc.priority-p2 {
+  border-width: 3px !important;
+  border-style: solid !important;
+  border-color: #3b82f6 !important;
+}
+
+/* P3 低:2px 虚线灰(最弱,表示"标记但不紧") */
+.mind-elixir-inner me-tpc.priority-p3 {
+  border-width: 2px !important;
+  border-style: dashed !important;
+  border-color: #95a5a6 !important;
+}
 
 /* 边框外左侧图标（::before pseudo-element + SVG data URI） */
 .mind-elixir-inner me-tpc[class*="priority-p"]::before {
