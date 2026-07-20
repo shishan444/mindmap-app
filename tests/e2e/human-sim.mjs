@@ -78,6 +78,51 @@ const TAURI_MOCK = `
     unregisterCallback: function() {},
     convertFileSrc: function(p) { return p; },
   };
+
+  // === Tauri event 系统 mock(让 listen/emit 真实工作)===
+  // @tauri-apps/api/event 的 listen 通过 invoke("plugin:event|listen") 注册
+  // 我们拦截这个命令,维护 event -> [callbackId] 映射
+  window.__TAURI_EVENT_LISTENERS__ = {}; // event -> [callbackId]
+  window.__TAURI_CALLBACKS__ = {}; // callbackId -> { cb, once }
+  window.__TAURI_INTERNALS__.transformCallback = function(cb, once) {
+    const id = "cb_" + Math.random().toString(36).slice(2);
+    window.__TAURI_CALLBACKS__[id] = { cb, once: !!once };
+    return id;
+  };
+  window.__TAURI_INTERNALS__.unregisterCallback = function(id) {
+    delete window.__TAURI_CALLBACKS__[id];
+  };
+
+  const origInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = async function(cmd, args) {
+    if (cmd === "plugin:event|listen") {
+      const ev = args?.event;
+      const handlerId = args?.handler;
+      if (ev && handlerId) {
+        if (!window.__TAURI_EVENT_LISTENERS__[ev]) {
+          window.__TAURI_EVENT_LISTENERS__[ev] = [];
+        }
+        window.__TAURI_EVENT_LISTENERS__[ev].push(handlerId);
+      }
+      return Math.random().toString(36).slice(2); // listener id
+    }
+    if (cmd === "plugin:event|unlisten") {
+      return null;
+    }
+    return origInvoke(cmd, args);
+  };
+
+  // 手动触发 event(测试用)
+  window.__mockEmitTauriEvent = function(event, payload) {
+    const ids = window.__TAURI_EVENT_LISTENERS__[event] || [];
+    for (const id of ids) {
+      const entry = window.__TAURI_CALLBACKS__[id];
+      if (entry?.cb) {
+        entry.cb({ event, payload, id: 0, windowLabel: "" });
+        if (entry.once) delete window.__TAURI_CALLBACKS__[id];
+      }
+    }
+  };
 })();
 `;
 
@@ -493,40 +538,14 @@ async function main() {
   record("H7-P0", "点击 P0 按钮,节点显示 priority-p0", h7HasP0);
   await c.screenshot("/Users/ss/works/tmp/24071720-e2e回归/h7-priority.png");
 
-  // === H8. Toast 点击跳转(本轮修复) ===
-  console.log("\n=== H8. Toast 点击跳转 ===");
-  // 模拟 reminder-triggered 事件,前端 ReminderToast 应显示 Toast
-  await c.evaluate(`(function() {
-    const reminder = {
-      id: "h8-test", node_id: ${JSON.stringify(rootId)}, source_file: "",
-      title: "H8 测试", message: "请跳转", trigger_at: "2099-01-01T00:00:00",
-      repeat_rule: null, priority: null, enabled: true, status: "pending",
-      last_triggered_at: null, snoozed_until: null, next_trigger_at: null,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    };
-    // Tauri event 系统 — 直接走 window.__TAURI_INTERNALS__ 的 emit(如果有)
-    // 否则手动 dispatch 给 ReminderToast 的 listener
-    window.dispatchEvent(new CustomEvent("reminder-triggered-mock", { detail: reminder }));
-  })()`);
-  await sleep(300);
-  // ReminderToast 用的是 @tauri-apps/api/event 的 listen,无法直接 mock
-  // 改用:直接调用 jumpToNode 的内部逻辑(通过模拟 Toast 点击)
-  // 先手动渲染一个 Toast(注入 DOM)
-  await c.evaluate(`(function() {
-    const container = document.createElement("div");
-    container.className = "reminder-toast-container";
-    container.id = "h8-test-toast";
-    container.innerHTML = '<div class="reminder-toast" id="h8-clickable">CLICK_ME</div>';
-    document.body.appendChild(container);
-  })()`);
-  await sleep(100);
-  // 同时:直接调用 __centerNode 验证(这是 jumpToNode 的核心)
-  // 故意把节点拖到角落
+  // === H8. Toast 点击跳转(完整人类模拟:真实 emit event → 真实鼠标点 Toast)===
+  console.log("\n=== H8. Toast 点击跳转(完整链路) ===");
+  // 先把节点拖到角落,确保跳转有视觉变化
   await c.evaluate(`(function() {
     const mc = document.querySelector(".map-canvas");
     if (mc) mc.style.transform = "translate3d(-300px, -200px, 0) scale(1)";
   })()`);
-  await sleep(200);
+  await sleep(300);
   const h8Before = await c.evaluate(`(function() {
     const inner = document.querySelector(".mind-elixir-inner");
     const root = document.querySelector("me-root");
@@ -534,14 +553,55 @@ async function main() {
     const ir = inner.getBoundingClientRect();
     const rr = root.getBoundingClientRect();
     return {
-      dx: Math.abs((ir.x + ir.width/2) - (rr.x + rr.width/2)),
-      dy: Math.abs((ir.y + ir.height/2) - (rr.y + rr.height/2)),
+      dx: Math.round(Math.abs((ir.x + ir.width/2) - (rr.x + rr.width/2))),
+      dy: Math.round(Math.abs((ir.y + ir.height/2) - (rr.y + rr.height/2))),
     };
   })()`);
   console.log("  [debug] H8 跳转前 dx/dy:", JSON.stringify(h8Before));
-  // 调用 __centerNode(jumpToNode 的核心)
-  await c.evaluate(`window.__centerNode(${JSON.stringify(rootId)})`);
+
+  // 真实 emit "reminder-triggered" event(走完整 Tauri event 链路)
+  // ReminderToast 的 listen("reminder-triggered", handler) 应该收到
+  await c.evaluate(`(function() {
+    const reminder = {
+      id: "h8-test", node_id: ${JSON.stringify(rootId)},
+      source_file: window.__store?.getState?.().filePath || "",
+      title: "H8-Toast测试", message: "请点击跳转",
+      trigger_at: "2099-01-01T00:00:00",
+      repeat_rule: null, priority: null, enabled: true, status: "pending",
+      last_triggered_at: null, snoozed_until: null, next_trigger_at: null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    window.__mockEmitTauriEvent("reminder-triggered", reminder);
+  })()`);
   await sleep(500);
+
+  // 验证 Toast 真的显示了
+  const h8ToastVisible = await c.evaluate(`!!document.querySelector(".reminder-toast")`);
+  console.log("  [debug] Toast 显示:", h8ToastVisible);
+  if (!h8ToastVisible) {
+    // 调试:看 listeners
+    const debugListeners = await c.evaluate(`JSON.stringify(Object.keys(window.__TAURI_EVENT_LISTENERS__ || {}))`);
+    console.log("  [debug] 已注册 listeners:", debugListeners);
+  }
+
+  // 真实鼠标点击 Toast(非 JS click,触发 React onClick)
+  let h8Clicked = false;
+  if (h8ToastVisible) {
+    const toastPos = await c.evaluate(`(function() {
+      const t = document.querySelector(".reminder-toast");
+      if (!t) return null;
+      const r = t.getBoundingClientRect();
+      return { x: r.x + r.width/2, y: r.y + r.height/2 };
+    })()`);
+    if (toastPos) {
+      console.log("  [debug] Toast 位置:", JSON.stringify(toastPos));
+      await c.humanClick(toastPos.x, toastPos.y);
+      await sleep(500);
+      h8Clicked = true;
+    }
+  }
+
+  // 验证节点居中
   const h8After = await c.evaluate(`(function() {
     const inner = document.querySelector(".mind-elixir-inner");
     const root = document.querySelector("me-root");
@@ -551,11 +611,13 @@ async function main() {
     return {
       dx: Math.round(Math.abs((ir.x + ir.width/2) - (rr.x + rr.width/2))),
       dy: Math.round(Math.abs((ir.y + ir.height/2) - (rr.y + rr.height/2))),
-      centered: false,
     };
   })()`);
   const h8Centered = h8After && h8After.dx <= 5 && h8After.dy <= 5;
-  record("H8-Toast跳转", "Toast 调用 __centerNode 节点居中", h8Centered === true, `dx=${h8After?.dx}, dy=${h8After?.dy}`);
+  record("H8-Toast显示", "emit event 后 Toast 渲染", h8ToastVisible);
+  record("H8-Toast点击", "真实鼠标点击 Toast", h8Clicked);
+  record("H8-节点居中", "Toast 点击触发 __centerNode 居中", h8Centered === true, `跳转前 dx=${h8Before?.dx}/dy=${h8Before?.dy}, 跳转后 dx=${h8After?.dx}/dy=${h8After?.dy}`);
+  await c.screenshot("/Users/ss/works/tmp/24071720-e2e回归/h8-toast-jump.png");
 
   // === 汇总 ===
   console.log("\n=== 汇总 ===");
