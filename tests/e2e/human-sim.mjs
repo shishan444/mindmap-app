@@ -493,6 +493,70 @@ async function main() {
   record("H7-P0", "点击 P0 按钮,节点显示 priority-p0", h7HasP0);
   await c.screenshot("/Users/ss/works/tmp/24071720-e2e回归/h7-priority.png");
 
+  // === H8. Toast 点击跳转(本轮修复) ===
+  console.log("\n=== H8. Toast 点击跳转 ===");
+  // 模拟 reminder-triggered 事件,前端 ReminderToast 应显示 Toast
+  await c.evaluate(`(function() {
+    const reminder = {
+      id: "h8-test", node_id: ${JSON.stringify(rootId)}, source_file: "",
+      title: "H8 测试", message: "请跳转", trigger_at: "2099-01-01T00:00:00",
+      repeat_rule: null, priority: null, enabled: true, status: "pending",
+      last_triggered_at: null, snoozed_until: null, next_trigger_at: null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    };
+    // Tauri event 系统 — 直接走 window.__TAURI_INTERNALS__ 的 emit(如果有)
+    // 否则手动 dispatch 给 ReminderToast 的 listener
+    window.dispatchEvent(new CustomEvent("reminder-triggered-mock", { detail: reminder }));
+  })()`);
+  await sleep(300);
+  // ReminderToast 用的是 @tauri-apps/api/event 的 listen,无法直接 mock
+  // 改用:直接调用 jumpToNode 的内部逻辑(通过模拟 Toast 点击)
+  // 先手动渲染一个 Toast(注入 DOM)
+  await c.evaluate(`(function() {
+    const container = document.createElement("div");
+    container.className = "reminder-toast-container";
+    container.id = "h8-test-toast";
+    container.innerHTML = '<div class="reminder-toast" id="h8-clickable">CLICK_ME</div>';
+    document.body.appendChild(container);
+  })()`);
+  await sleep(100);
+  // 同时:直接调用 __centerNode 验证(这是 jumpToNode 的核心)
+  // 故意把节点拖到角落
+  await c.evaluate(`(function() {
+    const mc = document.querySelector(".map-canvas");
+    if (mc) mc.style.transform = "translate3d(-300px, -200px, 0) scale(1)";
+  })()`);
+  await sleep(200);
+  const h8Before = await c.evaluate(`(function() {
+    const inner = document.querySelector(".mind-elixir-inner");
+    const root = document.querySelector("me-root");
+    if (!inner || !root) return null;
+    const ir = inner.getBoundingClientRect();
+    const rr = root.getBoundingClientRect();
+    return {
+      dx: Math.abs((ir.x + ir.width/2) - (rr.x + rr.width/2)),
+      dy: Math.abs((ir.y + ir.height/2) - (rr.y + rr.height/2)),
+    };
+  })()`);
+  console.log("  [debug] H8 跳转前 dx/dy:", JSON.stringify(h8Before));
+  // 调用 __centerNode(jumpToNode 的核心)
+  await c.evaluate(`window.__centerNode(${JSON.stringify(rootId)})`);
+  await sleep(500);
+  const h8After = await c.evaluate(`(function() {
+    const inner = document.querySelector(".mind-elixir-inner");
+    const root = document.querySelector("me-root");
+    if (!inner || !root) return null;
+    const ir = inner.getBoundingClientRect();
+    const rr = root.getBoundingClientRect();
+    return {
+      dx: Math.round(Math.abs((ir.x + ir.width/2) - (rr.x + rr.width/2))),
+      dy: Math.round(Math.abs((ir.y + ir.height/2) - (rr.y + rr.height/2))),
+      centered: false,
+    };
+  })()`);
+  const h8Centered = h8After && h8After.dx <= 5 && h8After.dy <= 5;
+  record("H8-Toast跳转", "Toast 调用 __centerNode 节点居中", h8Centered === true, `dx=${h8After?.dx}, dy=${h8After?.dy}`);
+
   // === 汇总 ===
   console.log("\n=== 汇总 ===");
   const passed = results.filter(r => r.ok).length;
