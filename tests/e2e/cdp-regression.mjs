@@ -153,7 +153,16 @@ const TAURI_MOCK = `
           return makeContent("Markdown 导入");
         case "import_opml_file":
           return makeContent("OPML 导入");
+        // 对话框 mock:ask/confirm/message/open/save 都按 mockAskResponse 返回
+        // mockAskResponse 可由测试设置(true=确认,false=取消,undefined=默认确认)
+        case "plugin:dialog|ask":
+        case "plugin:dialog|confirm":
+          return window.__mockAskResponse !== undefined ? !!window.__mockAskResponse : true;
+        case "plugin:dialog|message":
+          return null;
         default:
+          // 静默吞掉其他 plugin 命令(不报 warn,避免干扰)
+          if (cmd.startsWith("plugin:")) return null;
           console.warn("[TAURI-MOCK] 未知命令", cmd);
           return null;
       }
@@ -855,6 +864,43 @@ const qResult = await c.evaluate(`(function(){
 })()`);
 record("Q2-调用", "centerNode 返回成功", qResult.ok, JSON.stringify(qResult));
 record("Q3-居中", "节点居中到容器中心(误差≤5px)", qResult.centered === true, `dx=${qResult.dx}, dy=${qResult.dy}`);
+
+// === R. 新建按钮 dirty 拦截(本轮新加功能) ===
+console.log("\n=== R. 新建按钮 dirty 拦截 ===");
+// R1:先改 topic 为标记,markDirty,然后 mock ask 返回 false → 新建应被拦截
+// 1. 改 topic 为标记值
+await c.evaluate(`(function(){
+  const s = window.__store.getState();
+  if (s.content) {
+    s.setContent({ ...s.content, root: { ...s.content.root, topic: "R1-标记" } });
+    s.markDirty();
+  }
+})()`);
+await sleep(200);
+const r1DirtyBefore = await c.evaluate(`window.__store?.getState?.().dirty`);
+console.log("  [debug] R1 dirty before:", r1DirtyBefore);
+
+// 2. mock ask 返回 false(模拟用户点"取消")
+await c.evaluate(`window.__mockAskResponse = false`);
+
+// 3. 点新建
+await c.evaluate(`(function(){const b=Array.from(document.querySelectorAll("button")).find(b=>b.title==="新建");if(b)b.click();})()`);
+await sleep(800);
+
+// 4. 验证 topic 没变(被拦截)
+const r1TopicAfter = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
+record("R1-dirty拦截", "dirty 时点新建,ask=false → topic 保持不变", r1TopicAfter === "R1-标记", `topic=${r1TopicAfter}(应保持 "R1-标记")`);
+
+// R2:非 dirty 时,新建直接生效(无拦截)
+await c.evaluate(`window.__store?.getState?.().markSaved()`);
+const r2Before = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
+await c.evaluate(`(function(){const b=Array.from(document.querySelectorAll("button")).find(b=>b.title==="新建");if(b)b.click();})()`);
+await sleep(800);
+const r2After = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
+record("R2-非dirty新建", "非 dirty 时点新建直接生效", r2After === "中心主题", `before=${r2Before} after=${r2After}`);
+
+// 清理 mock
+await c.evaluate(`window.__mockAskResponse = undefined`);
 
 // === 汇总 ===
 console.log("\n=== 汇总 ===");

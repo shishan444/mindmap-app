@@ -11,7 +11,7 @@
 | 单元（Rust） | cargo test | 100 通过 |
 | 集成（Rust） | cargo test --test integration | 17 通过 |
 | 类型检查 | tsc --noEmit | ✅ 0 错误 |
-| E2E（Chromium） | CDP + Tauri mock 注入 | 57 场景通过 |
+| E2E（Chromium） | CDP + Tauri mock 注入 | 59 场景通过 |
 | E2E 人类模拟(Chromium) | 真实鼠标轨迹 + 逐字符按键 + 截图 + Tauri event mock | 10 场景通过 |
 | WebKit（Tauri） | 用户验证 | ✅ 核心路径 |
 

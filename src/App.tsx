@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog, ask } from "@tauri-apps/plugin-dialog";
 import Toolbar from "./components/Toolbar";
 import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
@@ -133,6 +133,16 @@ function App() {
   }, [setAllReminders]);
 
   const handleNew = async () => {
+    // 危险操作保护:如果当前文档有未保存改动,先确认
+    // 避免误点"新建"导致数据丢失
+    const state = useMindMapStore.getState();
+    if (state.dirty && state.content) {
+      const confirmed = await ask(
+        "当前文档有未保存的改动,确定要放弃改动并新建文档吗?",
+        { title: "新建文档", kind: "warning", okLabel: "放弃并新建", cancelLabel: "取消" }
+      );
+      if (!confirmed) return;
+    }
     const c = await invoke<Content>("new_mmap", { topic: "中心主题" });
     setContent(c);
     setFilePath(null);
