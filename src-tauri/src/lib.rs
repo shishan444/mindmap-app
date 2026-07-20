@@ -37,11 +37,30 @@ pub(crate) mod test_support {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // 重复打开时激活已有窗口
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // 多窗口模式:外部二次启动 → 激活任意可见窗口(优先 main)
+            // 如果 args 包含 .mmap 文件路径,在新窗口打开它
+            use tauri::Manager;
+            let visible: Vec<_> = app
+                .webview_windows()
+                .into_iter()
+                .filter(|(_, w)| w.is_visible().unwrap_or(false))
+                .collect();
+            // 找 .mmap 参数(Dock 拖入)
+            let mmap_arg = args.iter().find(|a| a.ends_with(".mmap"));
+            if let Some(path) = mmap_arg {
+                // 在新窗口打开该文件
+                let _ = crate::commands::create_new_window(
+                    app.clone(),
+                    "open".into(),
+                    Some(path.clone()),
+                );
+            } else if let Some((_, w)) = visible.first() {
+                let _ = w.show();
+                let _ = w.set_focus();
+            } else if let Some(main) = app.get_webview_window("main") {
+                let _ = main.show();
+                let _ = main.set_focus();
             }
         }))
         .plugin(tauri_plugin_opener::init())
@@ -70,16 +89,11 @@ pub fn run() {
             });
 
             // === 清理测试数据污染(自动检测 + 备份) ===
-            // 历史问题:测试代码曾通过 set_var + save_reminders 把 100+ 测试 reminder
-            // 写到了真实 ~/Library/.../reminders.json。这里在启动时自动扫描,
-            // 发现测试标记字符串(source_file="/tmp/test.mmap", title="a"/"target" 等)
-            // 就备份原文件 + 用过滤后的干净数据启动。
             if let Some((clean, removed)) = state::filter_test_reminders(&initial_reminders) {
                 eprintln!(
                     "[mindmap] 检测到 {} 个测试残留 reminder,自动清理",
                     removed
                 );
-                // 备份原文件(防止误删,便于追溯)
                 if let Ok(path) = config::reminders_path() {
                     if path.exists() {
                         let backup = path.with_extension("json.polluted-backup");
@@ -87,17 +101,31 @@ pub fn run() {
                         eprintln!("[mindmap] 原文件已备份到 {}", backup.display());
                     }
                 }
-                // 用干净数据覆盖写盘
                 if let Err(e) = config::save_reminders(&clean) {
                     eprintln!("[mindmap] 清理后写盘失败: {}", e);
                 }
                 initial_reminders = clean;
             }
 
-            app.manage(state::AppState::new(initial_reminders));
+            // 加载 config(多窗口共享)
+            let initial_config = config::load_config().unwrap_or_else(|e| {
+                eprintln!("[mindmap] 加载 config.json 失败,使用默认值: {}", e);
+                crate::models::Config::default()
+            });
 
-            // === 启动提醒调度器（后台线程，30s 轮询）===
-            reminder_scheduler::spawn(app.handle().clone());
+            app.manage(state::AppState::new(initial_reminders, initial_config));
+
+            // === 启动提醒调度器(后台线程,30s 轮询) ===
+            // 多窗口模式:只在主窗口启动调度器(避免 N 窗口 N 个调度器并发触发)
+            // 子窗口由主窗口 emit 事件接收到(通过 source_file 过滤)
+            let main_window = app.get_webview_window("main");
+            let is_main = main_window.is_some();
+            if is_main {
+                reminder_scheduler::spawn(app.handle().clone());
+                println!("[mindmap] 主窗口启动,启动 reminder 调度器");
+            } else {
+                println!("[mindmap] 子窗口启动,跳过 reminder 调度器");
+            }
 
             // === 初始化开发模式日志（Phase 12）===
             // 即使失败也不阻塞启动
@@ -144,6 +172,10 @@ pub fn run() {
             commands::log_event,
             commands::is_dev_logger_ready,
             commands::import_freemind_file,
+            commands::create_new_window,
+            commands::list_windows,
+            commands::focus_window,
+            commands::close_current_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -178,26 +210,36 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn on_tray_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    use tauri::Manager;
     match event.id().as_ref() {
         "tray-show" => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+            // 多窗口:激活任意可见窗口(优先 main)
+            let visible = app
+                .webview_windows()
+                .into_iter()
+                .filter(|(_, w)| w.is_visible().unwrap_or(false));
+            let mut shown = false;
+            for (_, w) in visible {
+                let _ = w.set_focus();
+                shown = true;
+                break;
+            }
+            if !shown {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
             }
         }
         "tray-hide" => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.hide();
+            // 隐藏所有可见窗口
+            for (_, w) in app.webview_windows() {
+                let _ = w.hide();
             }
         }
         "tray-new" => {
-            // 显示窗口，前端会处理新建逻辑（用户点工具栏的"新建"）
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-                // 通过事件让前端创建新文档
-                let _ = window.emit("tray-action", "new");
-            }
+            // 多窗口模式:直接创建新窗口
+            let _ = crate::commands::create_new_window(app.clone(), "new".into(), None);
         }
         "tray-quit" => {
             app.exit(0);
@@ -213,26 +255,43 @@ fn on_tray_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
         ..
     } = event
     {
+        // 多窗口模式:左键点击托盘切换"全部隐藏/显示"
+        use tauri::Manager;
         let app = tray.app_handle();
-        if let Some(window) = app.get_webview_window("main") {
-            match window.is_visible() {
-                Ok(true) => {
-                    let _ = window.hide();
-                }
-                _ => {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+        let windows = app.webview_windows();
+        let any_visible = windows.values().any(|w| w.is_visible().unwrap_or(false));
+        if any_visible {
+            // 隐藏所有
+            for (_, w) in &windows {
+                let _ = w.hide();
+            }
+        } else {
+            // 显示所有 + 主窗口 focus
+            for (_, w) in &windows {
+                let _ = w.show();
+            }
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.set_focus();
             }
         }
     }
 }
 
-/// 窗口事件处理：点关闭按钮时改为隐藏（保持托盘常驻）
+/// 窗口事件处理:
+/// - 主窗口(main):点关闭按钮 → 隐藏到托盘(应用常驻)
+/// - 子窗口(doc-N):点关闭按钮 → destroy(真正销毁)
+/// 多窗口模式下,只有主窗口隐藏保留,子窗口直接销毁释放资源
 fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
-        // 不真正关闭，只隐藏（托盘常驻策略）
-        let _ = window.hide();
-        api.prevent_close();
+        let label = window.label();
+        if label == "main" {
+            // 主窗口:隐藏到托盘,应用常驻
+            let _ = window.hide();
+            api.prevent_close();
+        } else {
+            // 子窗口:让默认关闭流程继续(destroy)
+            // 注意:不加 prevent_close,窗口会正常关闭
+            println!("[mindmap] 子窗口 {} 关闭", label);
+        }
     }
 }

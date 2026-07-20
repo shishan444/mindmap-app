@@ -19,6 +19,13 @@ export default function ReminderToast() {
     (async () => {
       try {
         unlistenFn = await listen<Reminder>("reminder-triggered", (event) => {
+          // 多窗口模式:只显示归属当前窗口的 reminder
+          // 通过 source_file 匹配 store.filePath(本窗口的当前文档)
+          const currentFilePath = useMindMapStore.getState().filePath;
+          const sourceFile = event.payload.source_file;
+          if (sourceFile && currentFilePath && sourceFile !== currentFilePath) {
+            return;
+          }
           const item: ToastItem = {
             id: `${event.payload.id}-${Date.now()}`,
             reminder: event.payload,
@@ -27,7 +34,6 @@ export default function ReminderToast() {
           setToasts((prev) => [...prev, item]);
         });
       } catch (e) {
-        // 浏览器/测试环境忽略
         console.warn("[ReminderToast] listen failed:", e);
       }
     })();

@@ -503,3 +503,92 @@ pub fn import_freemind_file(path: String) -> Result<crate::models::Content> {
     let s = std::fs::read_to_string(&path)?;
     crate::freemind::import_freemind(&s)
 }
+
+// ===== 多窗口命令(XMind 模式) =====
+
+/// 创建新窗口加载新文档
+/// mode: "new" 新建空白 / "open" 打开已有文件(mmap_path 必填)
+#[tauri::command]
+pub fn create_new_window(
+    app: tauri::AppHandle,
+    mode: String,
+    mmap_path: Option<String>,
+) -> Result<String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    // 生成唯一 label
+    let label = format!("doc-{}", chrono::Utc::now().timestamp_millis());
+    // URL 携带参数,前端 App.tsx 解析后决定加载方式
+    let url = match mode.as_str() {
+        "open" => {
+            let path = mmap_path.ok_or_else(|| AppError::Other("open 模式需要 mmap_path".into()))?;
+            WebviewUrl::App(format!("/?mode=open&mmap={}", url_encode_path(&path)).into())
+        }
+        _ => WebviewUrl::App("/?mode=new".into()),
+    };
+    let window = WebviewWindowBuilder::new(&app, &label, url)
+        .title("思维导图")
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(800.0, 600.0)
+        .build()
+        .map_err(|e| AppError::Other(format!("创建窗口失败: {}", e)))?;
+    let _ = window.set_focus();
+    Ok(label)
+}
+
+/// 列出所有窗口信息(用于"窗口"菜单或托盘)
+#[tauri::command]
+pub fn list_windows(app: tauri::AppHandle) -> Vec<WindowInfo> {
+    use tauri::Manager;
+    app.webview_windows()
+        .iter()
+        .map(|(label, w)| WindowInfo {
+            label: label.clone(),
+            title: w.title().unwrap_or_default(),
+            is_visible: w.is_visible().unwrap_or(true),
+            is_focused: w.is_focused().unwrap_or(false),
+        })
+        .collect()
+}
+
+/// 激活指定窗口
+#[tauri::command]
+pub fn focus_window(app: tauri::AppHandle, label: String) -> Result<()> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| AppError::Other(format!("窗口不存在: {}", label)))?;
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+/// 关闭当前子窗口(主窗口不能通过此命令关闭)
+#[tauri::command]
+pub fn close_current_window(window: tauri::Window) -> Result<()> {
+    let label = window.label();
+    if label == "main" {
+        return Err(AppError::Other("主窗口不能通过此命令关闭".into()));
+    }
+    let _ = window.close();
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct WindowInfo {
+    pub label: String,
+    pub title: String,
+    pub is_visible: bool,
+    pub is_focused: bool,
+}
+
+fn url_encode_path(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            ' ' => "%20".into(),
+            '&' => "%26".into(),
+            '?' => "%3F".into(),
+            '#' => "%23".into(),
+            _ => c.to_string(),
+        })
+        .collect()
+}

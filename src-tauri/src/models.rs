@@ -394,6 +394,11 @@ pub struct Config {
     pub last_opened_file: Option<String>,
     #[serde(default)]
     pub window_state: WindowState,
+    /// 多窗口模式:按 window label 分键存储窗口状态
+    /// key = window label("main" / "doc-1" / "doc-2" / ...)
+    /// 兼容:旧版本无此字段时,window_state 作为 main 的默认值
+    #[serde(default)]
+    pub window_states: std::collections::HashMap<String, WindowState>,
     #[serde(default)]
     pub ui: UiPrefs,
     #[serde(default = "default_auto_save_sec")]
@@ -426,6 +431,7 @@ impl Default for Config {
             default_new_file_dir: dirs::document_dir().map(|p| p.to_string_lossy().into_owned()),
             last_opened_file: None,
             window_state: WindowState::default(),
+            window_states: std::collections::HashMap::new(),
             ui: UiPrefs::default(),
             auto_save_interval_sec: default_auto_save_sec(),
             recent_files_max: default_recent_files_max(),

@@ -27,15 +27,17 @@ use std::sync::Mutex;
 
 use crate::config;
 use crate::error::Result;
-use crate::models::ReminderIndex;
+use crate::models::{Config, ReminderIndex};
 
 /// Save 函数类型(返回 Result)。生产用真实 save_reminders,测试用 None。
 type SaveFn = Box<dyn Fn(&ReminderIndex) -> Result<()> + Send + Sync>;
 
-/// 全局应用状态(目前只承载 reminders,后续可扩展)
+/// 全局应用状态(目前承载 reminders + config,后续可扩展)
 pub struct AppState {
     /// 全局 reminder 集合,所有读写都通过这个 Mutex 串行化
     pub reminders: Mutex<ReminderIndex>,
+    /// 全局 config(多窗口共享,通过 Mutex 防止并发写竞态)
+    pub config: Mutex<Config>,
     /// 写盘函数。生产环境注入真实 save_reminders;测试环境用 None 跳过。
     /// 这是依赖注入,避免测试代码污染真实数据目录。
     save_fn: Option<SaveFn>,
@@ -43,18 +45,20 @@ pub struct AppState {
 
 impl AppState {
     /// 生产构造方法:注入真实 save_reminders(写到 ~/Library/.../reminders.json)
-    pub fn new(initial: ReminderIndex) -> Self {
+    pub fn new(initial_reminders: ReminderIndex, initial_config: Config) -> Self {
         Self {
-            reminders: Mutex::new(initial),
+            reminders: Mutex::new(initial_reminders),
+            config: Mutex::new(initial_config),
             save_fn: Some(Box::new(|idx| config::save_reminders(idx))),
         }
     }
 
     /// 测试构造方法:不写盘,纯内存。彻底杜绝测试污染生产数据。
     #[cfg(test)]
-    pub fn new_in_memory(initial: ReminderIndex) -> Self {
+    pub fn new_in_memory(initial_reminders: ReminderIndex) -> Self {
         Self {
-            reminders: Mutex::new(initial),
+            reminders: Mutex::new(initial_reminders),
+            config: Mutex::new(Config::default()),
             save_fn: None,
         }
     }

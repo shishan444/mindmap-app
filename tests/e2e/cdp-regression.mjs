@@ -131,6 +131,14 @@ const TAURI_MOCK = `
           return null;
         case "read_thumbnail":
           return null;
+        // 多窗口命令 mock
+        case "create_new_window":
+          return "mock-doc-window-" + Date.now();
+        case "list_windows":
+          return [{ label: "main", title: "思维导图", is_visible: true, is_focused: true }];
+        case "focus_window":
+        case "close_current_window":
+          return null;
         case "get_reminders_for_node":
           return state.reminders.filter(r => r.node_id === args?.nodeId);
         case "get_reminders":
@@ -865,10 +873,9 @@ const qResult = await c.evaluate(`(function(){
 record("Q2-调用", "centerNode 返回成功", qResult.ok, JSON.stringify(qResult));
 record("Q3-居中", "节点居中到容器中心(误差≤5px)", qResult.centered === true, `dx=${qResult.dx}, dy=${qResult.dy}`);
 
-// === R. 新建按钮 dirty 拦截(本轮新加功能) ===
-console.log("\n=== R. 新建按钮 dirty 拦截 ===");
-// R1:先改 topic 为标记,markDirty,然后 mock ask 返回 false → 新建应被拦截
-// 1. 改 topic 为标记值
+// === R. 多窗口新建行为(本轮新加功能) ===
+console.log("\n=== R. 多窗口新建行为 ===");
+// R1:dirty 时点新建 — 多窗口模式下不替换当前文档,所以 dirty 数据不丢
 await c.evaluate(`(function(){
   const s = window.__store.getState();
   if (s.content) {
@@ -878,29 +885,22 @@ await c.evaluate(`(function(){
 })()`);
 await sleep(200);
 const r1DirtyBefore = await c.evaluate(`window.__store?.getState?.().dirty`);
-console.log("  [debug] R1 dirty before:", r1DirtyBefore);
-
-// 2. mock ask 返回 false(模拟用户点"取消")
-await c.evaluate(`window.__mockAskResponse = false`);
-
-// 3. 点新建
+// 拦截 create_new_window
+await c.evaluate(`window.__newWindowCalled = false; const origInvoke = window.__TAURI_INTERNALS__.invoke; window.__TAURI_INTERNALS__.invoke = async function(cmd, args) { if (cmd === "create_new_window") { window.__newWindowCalled = true; return "mock-window"; } return origInvoke.apply(this, arguments); }`);
 await c.evaluate(`(function(){const b=Array.from(document.querySelectorAll("button")).find(b=>b.title==="新建");if(b)b.click();})()`);
-await sleep(800);
-
-// 4. 验证 topic 没变(被拦截)
+await sleep(500);
 const r1TopicAfter = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
-record("R1-dirty拦截", "dirty 时点新建,ask=false → topic 保持不变", r1TopicAfter === "R1-标记", `topic=${r1TopicAfter}(应保持 "R1-标记")`);
+const r1DirtyAfter = await c.evaluate(`window.__store?.getState?.().dirty`);
+record("R1-dirty不丢", "dirty 时点新建,当前文档保留(topic/dirty 不变)", r1TopicAfter === "R1-标记" && r1DirtyAfter === true && r1DirtyBefore === true, `topic=${r1TopicAfter}, dirty ${r1DirtyBefore}→${r1DirtyAfter}`);
 
-// R2:非 dirty 时,新建直接生效(无拦截)
-await c.evaluate(`window.__store?.getState?.().markSaved()`);
+// R2:点新建调用 create_new_window 命令
 const r2Before = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
+await c.evaluate(`window.__newWindowCalled = false`);
 await c.evaluate(`(function(){const b=Array.from(document.querySelectorAll("button")).find(b=>b.title==="新建");if(b)b.click();})()`);
-await sleep(800);
+await sleep(500);
 const r2After = await c.evaluate(`window.__store?.getState?.().content?.root?.topic`);
-record("R2-非dirty新建", "非 dirty 时点新建直接生效", r2After === "中心主题", `before=${r2Before} after=${r2After}`);
-
-// 清理 mock
-await c.evaluate(`window.__mockAskResponse = undefined`);
+const r2NewWindowCalled = await c.evaluate(`window.__newWindowCalled`);
+record("R2-多窗口新建", "点新建调用 create_new_window(不替换当前文档)", r2NewWindowCalled === true && r2Before === r2After, `before=${r2Before} after=${r2After}, newWindowCalled=${r2NewWindowCalled}`);
 
 // === 汇总 ===
 console.log("\n=== 汇总 ===");

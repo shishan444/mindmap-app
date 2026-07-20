@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog, save as saveDialog, ask } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import Toolbar from "./components/Toolbar";
 import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
@@ -14,7 +15,6 @@ import { useWindowState } from "./hooks/useWindowState";
 import {
   initDevLogger,
   logUserAction,
-  logError,
   logState,
 } from "./utils/devLogger";
 import type { Config, Content, Priority, Reminder } from "./types";
@@ -69,52 +69,84 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // 多窗口模式:根据 URL 参数决定加载哪个文档
+  // 主窗口(label="main"):恢复 last_opened_file 或显示空
+  // 子窗口(label="doc-N"):按 URL ?mode=open&mmap=/path 或 ?mode=new 加载
   useEffect(() => {
     (async () => {
       try {
         const cfg = await invoke<Config>("get_config");
         setConfig(cfg);
-        logState("config.loaded", { hasLastOpened: !!cfg.last_opened_file });
-        // 尝试恢复 last_opened_file
-        let restored = false;
-        if (cfg.last_opened_file) {
-          const exists = await invoke<boolean>("path_exists", {
-            path: cfg.last_opened_file,
-          });
-          if (exists) {
+
+        // 解析当前窗口 label + URL 参数
+        // mock 环境(getCurrentWindow 可能 throw)容错:默认 "main"
+        let label = "main";
+        try {
+          label = getCurrentWindow().label;
+        } catch {
+          // 浏览器/测试环境
+        }
+        const url = new URL(window.location.href);
+        const mode = url.searchParams.get("mode");
+        const mmapPath = url.searchParams.get("mmap");
+        logState("window.boot", { label, mode, mmapPath });
+
+        if (label === "main" && !mode) {
+          // 主窗口无参数:恢复 last_opened_file
+          let restored = false;
+          if (cfg.last_opened_file) {
+            const exists = await invoke<boolean>("path_exists", { path: cfg.last_opened_file });
+            if (exists) {
+              try {
+                const c = await invoke<Content>("open_mmap", { path: cfg.last_opened_file });
+                setContent(c);
+                setFilePath(cfg.last_opened_file);
+                restored = true;
+              } catch (e) {
+                console.error("[App] 主窗口恢复上次文件失败", e);
+              }
+            }
+          }
+          if (!restored) {
+            const c = await invoke<Content>("new_mmap", { topic: "中心主题" });
+            setContent(c);
+            setFilePath(null);
+          }
+        } else if (mode === "open" && mmapPath) {
+          // 子窗口打开已有文件
+          const c = await invoke<Content>("open_mmap", { path: mmapPath });
+          setContent(c);
+          setFilePath(mmapPath);
+          try {
+            await getCurrentWindow().setTitle(`思维导图 - ${mmapPath.split("/").pop()}`);
+          } catch {
+            // 测试环境忽略
+          }
+        } else {
+          // 子窗口新建空白(mode === "new" 或无参)
+          const c = await invoke<Content>("new_mmap", { topic: "中心主题" });
+          setContent(c);
+          setFilePath(null);
+          if (label !== "main") {
             try {
-              const c = await invoke<Content>("open_mmap", {
-                path: cfg.last_opened_file,
-              });
-              setContent(c);
-              setFilePath(cfg.last_opened_file);
-              restored = true;
-              logState("file.restored", { path: cfg.last_opened_file });
-            } catch (e) {
-              console.error("[App] 恢复上次文件失败，回退到新建", e);
-              logError("file.restore.failed", String(e));
+              await getCurrentWindow().setTitle("思维导图 - 新建文档");
+            } catch {
+              // 测试环境忽略
             }
           }
         }
-        if (!restored) {
-          const c = await invoke<Content>("new_mmap", {
-            topic: "中心主题",
-          });
-          setContent(c);
-          setFilePath(null);
-          logState("file.auto_new", null);
-        }
       } catch (e) {
         console.error("[App] 启动失败", e);
-        logError("app.boot.failed", String(e));
       } finally {
         setBooted(true);
-        logState("app.booted", null);
       }
     })();
   }, [setContent, setFilePath, setConfig]);
 
-  // === 加载全局 reminders + 每分钟刷新(用于画布渲染沙漏) ===
+
+  // === 加载全局 reminders(每窗口都加载,用于画布渲染沙漏) ===
+  // 多窗口模式:每窗口都需要画布沙漏标识,所以每窗口都加载 reminders 全量
+  // 但**只在主窗口启动 60s 定时器**(避免 N 窗口 N 个定时器并发请求)
   useEffect(() => {
     let timer: number | undefined;
     const load = async () => {
@@ -126,28 +158,29 @@ function App() {
       }
     };
     load();
-    timer = window.setInterval(load, 60_000);
+    // 只主窗口启动定时器(mock 环境容错)
+    let label = "main";
+    try { label = getCurrentWindow().label; } catch {}
+    if (label === "main") {
+      timer = window.setInterval(load, 60_000);
+    }
     return () => {
       if (timer) clearInterval(timer);
     };
   }, [setAllReminders]);
 
+  // 多窗口模式:点"新建"创建新窗口(当前窗口不动)
+  // 这是 XMind 模式 — 每个文档独立窗口
   const handleNew = async () => {
-    // 危险操作保护:如果当前文档有未保存改动,先确认
-    // 避免误点"新建"导致数据丢失
-    const state = useMindMapStore.getState();
-    if (state.dirty && state.content) {
-      const confirmed = await ask(
-        "当前文档有未保存的改动,确定要放弃改动并新建文档吗?",
-        { title: "新建文档", kind: "warning", okLabel: "放弃并新建", cancelLabel: "取消" }
-      );
-      if (!confirmed) return;
+    try {
+      await invoke("create_new_window", { mode: "new", mmapPath: null });
+    } catch (e) {
+      console.error("[App] 创建新窗口失败", e);
+      alert("创建新窗口失败: " + e);
     }
-    const c = await invoke<Content>("new_mmap", { topic: "中心主题" });
-    setContent(c);
-    setFilePath(null);
   };
 
+  // 多窗口模式:点"打开"在**新窗口**打开文件(当前窗口不动)
   const handleOpen = async () => {
     const cfg = useMindMapStore.getState().config;
     const selected = await openDialog({
@@ -157,19 +190,22 @@ function App() {
     });
     if (typeof selected !== "string" || !selected) return;
     try {
-      const c = await invoke<Content>("open_mmap", { path: selected });
-      setContent(c);
-      setFilePath(selected);
-      const name =
-        selected.split("/").pop()?.replace(/\.mmap$/, "") || "未命名";
-      await invoke("add_recent_file", { path: selected, name });
+      // 检查是否已有窗口打开同文件(避免多窗口编辑同文件冲突)
+      const windows = await invoke<Array<{ label: string; title: string }>>("list_windows");
+      const title = selected.split("/").pop()?.replace(/\.mmap$/, "") || "未命名";
+      // 简单匹配:窗口 title 包含文件 stem
+      const existing = windows.find((w) => w.title.includes(title));
+      if (existing) {
+        // 已有窗口,激活它
+        await invoke("focus_window", { label: existing.label });
+        return;
+      }
+      // 记录最近文件 + 创建新窗口
+      await invoke("add_recent_file", { path: selected, name: title });
       await invoke("set_last_opened_file", { path: selected });
       const dir = selected.split("/").slice(0, -1).join("/");
-      await invoke("update_last_dirs", {
-        openDir: dir,
-        exportDir: null,
-        importDir: null,
-      });
+      await invoke("update_last_dirs", { openDir: dir, exportDir: null, importDir: null });
+      await invoke("create_new_window", { mode: "open", mmapPath: selected });
     } catch (e) {
       console.error("[App] 打开失败", e);
       alert("打开失败: " + e);
