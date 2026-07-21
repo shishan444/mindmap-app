@@ -179,19 +179,38 @@ function App() {
       try {
         const win = getCurrentWindow();
         const label = win.label;
-        if (label === "main") return; // 主窗口由 Rust handler 处理(隐藏到托盘)
+        console.log("[App][close-watch] useEffect 触发, label=", label);
+        if (label === "main") {
+          console.log("[App][close-watch] 主窗口,跳过子窗口 close 监听");
+          return;
+        }
+        console.log("[App][close-watch] 子窗口,注册 onCloseRequested");
         unlisten = await win.onCloseRequested(async (event) => {
-          console.log("[App] 子窗口 close requested,主动 destroy, label=", label);
-          event.preventDefault(); // 阻止 Tauri 默认流程(可能被卡住)
+          console.log("[App][close-watch] onCloseRequested 触发, label=", label);
+          event.preventDefault();
           try {
-            await win.destroy(); // 强制销毁
+            console.log("[App][close-watch] 调用 win.destroy()");
+            await win.destroy();
+            console.log("[App][close-watch] destroy 成功");
           } catch (e) {
-            console.error("[App] destroy 失败,尝试 close", e);
-            try { await win.close(); } catch {}
+            console.error("[App][close-watch] destroy 失败", e);
+            try {
+              console.log("[App][close-watch] fallback 调用 win.close()");
+              await win.close();
+            } catch (e2) {
+              console.error("[App][close-watch] close 也失败", e2);
+            }
           }
         });
-      } catch {
-        // 测试环境忽略(getCurrentWindow 不可用)
+        console.log("[App][close-watch] onCloseRequested 注册成功, unlisten=", typeof unlisten);
+
+        // 兜底:暴露一个手动关闭函数到 window,用户可通过 DevTools console 调用
+        (window as any).__forceCloseWindow = async () => {
+          console.log("[App][close-watch] 手动触发 __forceCloseWindow");
+          try { await win.destroy(); } catch (e) { console.error(e); }
+        };
+      } catch (e) {
+        console.warn("[App][close-watch] 注册失败", e);
       }
     })();
     return () => {

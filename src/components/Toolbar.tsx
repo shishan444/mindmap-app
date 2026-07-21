@@ -2,6 +2,7 @@ import { useMindMapStore } from "../store";
 import type { Priority } from "../types";
 import { PRIORITY_LABELS } from "../types";
 import { logUserAction } from "../utils/devLogger";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./Toolbar.css";
 
 interface Props {
@@ -43,6 +44,14 @@ export default function Toolbar({
 }: Props) {
   const dirty = useMindMapStore((s) => s.dirty);
   const content = useMindMapStore((s) => s.content);
+  // 子窗口判断(macOS 关闭按钮失效时,工具栏显示"关闭窗口"兜底按钮)
+  const isChildWindow = (() => {
+    try {
+      return getCurrentWindow().label !== "main";
+    } catch {
+      return false;
+    }
+  })();
 
   return (
     <div className="toolbar">
@@ -184,6 +193,25 @@ export default function Toolbar({
       <div className="toolbar-group">
         <span className="tb-shortcut-hint">Tab=子 · Enter=兄 · F2=编辑 · Cmd+.=折叠</span>
         <button className="tb-btn" onClick={onOpenPreferences} title="偏好设置">⚙</button>
+        {/* 子窗口专属:显示"关闭窗口"按钮(macOS 关闭按钮失效时的兜底) */}
+        {isChildWindow && (
+          <button
+            className="tb-btn"
+            onClick={async () => {
+              try {
+                const { getCurrentWindow } = await import("@tauri-apps/api/window");
+                await getCurrentWindow().destroy();
+              } catch (e) {
+                console.error("[Toolbar] 关闭窗口失败", e);
+                alert("关闭失败: " + e);
+              }
+            }}
+            title="关闭此窗口(子窗口专用)"
+            style={{ color: "#e74c3c" }}
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
