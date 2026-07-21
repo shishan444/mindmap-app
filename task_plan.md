@@ -115,6 +115,7 @@ macOS 桌面思维导图应用，覆盖思维导图核心能力 + 文件互通 +
 | 删除提醒后依然会触发 | reminder_scheduler 与 commands::delete_reminder 各自走 `load → modify → save`,非原子。调度器 load V1(含 A)→ 用户删除 save V2(不含 A)→ 调度器 save 基于 V1 的修改版(含 A)→ **A 又被写回 reminders.json** | 引入 `AppState(Mutex<ReminderIndex>)` 作为单一数据源,所有读写通过 Mutex 串行化;启动时 load 一次到内存,save 命令/调度器都用 state.modify_reminders 闭包操作 |
 | 删除后提醒仍触发 + 内容是 "a"(测试污染) | state::tests 通过 `std::env::set_var("MINDMAP_TEST_DATA_DIR", ...)` 隔离写盘路径,但 set_var 在多线程不安全 + `.cargo/config.toml [env]` 某些场景不生效,测试并发跑时 set_var 互相覆盖,save_reminders 写到真实 `~/Library/.../reminders.json`,污染 100+ 个 title="a" 的测试 reminder。**根因是测试代码与生产代码共享 save_reminders 路径,缺少依赖注入** | 1. AppState 改为依赖注入:`save_fn: Option<Box<...>>`,生产 `new()` 注入真实 save,测试 `new_in_memory()` 用 None 完全跳过写盘;2. 加 `in_memory_never_writes_to_disk` 测试守卫;3. 启动时自动检测+清理已污染数据(filter_test_reminders) |
 | 新建按钮直接清空文档,丢失未保存改动 | handleNew 直接 invoke("new_mmap") + setContent,无 dirty 检查;用户误点会丢工作 | 加 ask 原生对话框("当前文档有未保存的改动,确定要放弃改动并新建文档吗?"),dirty 时拦截;okLabel="放弃并新建",cancelLabel="取消"(macOS 风格) |
+| 多窗口子窗口关闭按钮失效(只能 kill 进程) | Rust 全局 `Builder::on_window_event` 对**动态创建**的子窗口触发不可靠(Tauri 2 行为限制);即使触发了 prevent_close 逻辑判断,某些 macOS 环境下默认关闭流程被阻塞 | 前端 `getCurrentWindow().onCloseRequested` 主动监听,子窗口收到事件后 `event.preventDefault()` + `win.destroy()` 强制销毁,绕过 Tauri 默认流程。主窗口仍由 Rust handler 处理(隐藏到托盘) |
 
 ---
 

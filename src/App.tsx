@@ -169,6 +169,36 @@ function App() {
     };
   }, [setAllReminders]);
 
+  // === 子窗口关闭按钮处理(关键修复)===
+  // bug:用户报告子窗口关闭按钮无法关闭,只能 kill 进程
+  // 根因:Rust 全局 on_window_event 对动态创建的子窗口触发不可靠
+  // 修复:前端主动监听 close request,子窗口强制 destroy(绕过 Tauri 默认流程)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const win = getCurrentWindow();
+        const label = win.label;
+        if (label === "main") return; // 主窗口由 Rust handler 处理(隐藏到托盘)
+        unlisten = await win.onCloseRequested(async (event) => {
+          console.log("[App] 子窗口 close requested,主动 destroy, label=", label);
+          event.preventDefault(); // 阻止 Tauri 默认流程(可能被卡住)
+          try {
+            await win.destroy(); // 强制销毁
+          } catch (e) {
+            console.error("[App] destroy 失败,尝试 close", e);
+            try { await win.close(); } catch {}
+          }
+        });
+      } catch {
+        // 测试环境忽略(getCurrentWindow 不可用)
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
   // 多窗口模式:点"新建"创建新窗口(当前窗口不动)
   // 这是 XMind 模式 — 每个文档独立窗口
   const handleNew = async () => {

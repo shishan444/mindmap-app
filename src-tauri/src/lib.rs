@@ -282,16 +282,27 @@ fn on_tray_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
 /// - 子窗口(doc-N):点关闭按钮 → destroy(真正销毁)
 /// 多窗口模式下,只有主窗口隐藏保留,子窗口直接销毁释放资源
 fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
-    if let WindowEvent::CloseRequested { api, .. } = event {
-        let label = window.label();
-        if label == "main" {
-            // 主窗口:隐藏到托盘,应用常驻
-            let _ = window.hide();
-            api.prevent_close();
-        } else {
-            // 子窗口:让默认关闭流程继续(destroy)
-            // 注意:不加 prevent_close,窗口会正常关闭
-            println!("[mindmap] 子窗口 {} 关闭", label);
+    let label = window.label().to_string();
+    match event {
+        WindowEvent::CloseRequested { api, .. } => {
+            println!("[window-event] CloseRequested label={}", label);
+            if label == "main" {
+                println!("[window-event] 主窗口隐藏到托盘");
+                let _ = window.hide();
+                api.prevent_close();
+            } else {
+                println!("[window-event] 子窗口 {} 走默认关闭流程", label);
+                // 不 prevent_close,默认 destroy
+            }
         }
+        WindowEvent::Destroyed => {
+            println!("[window-event] Destroyed label={}", label);
+        }
+        WindowEvent::Focused(focused) => {
+            if *focused {
+                println!("[window-event] Focused label={}", label);
+            }
+        }
+        _ => {}
     }
 }

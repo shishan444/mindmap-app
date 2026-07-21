@@ -520,11 +520,12 @@ pub fn create_new_window(
     // URL 携带参数,前端 App.tsx 解析后决定加载方式
     let url = match mode.as_str() {
         "open" => {
-            let path = mmap_path.ok_or_else(|| AppError::Other("open 模式需要 mmap_path".into()))?;
+            let path = mmap_path.clone().ok_or_else(|| AppError::Other("open 模式需要 mmap_path".into()))?;
             WebviewUrl::App(format!("/?mode=open&mmap={}", url_encode_path(&path)).into())
         }
         _ => WebviewUrl::App("/?mode=new".into()),
     };
+    let window_label = label.clone();
     let window = WebviewWindowBuilder::new(&app, &label, url)
         .title("思维导图")
         .inner_size(1200.0, 800.0)
@@ -532,6 +533,16 @@ pub fn create_new_window(
         .build()
         .map_err(|e| AppError::Other(format!("创建窗口失败: {}", e)))?;
     let _ = window.set_focus();
+    // 设置窗口 title(子窗口根据模式)
+    let title = match mode.as_str() {
+        "open" => mmap_path
+            .clone()
+            .map(|p| format!("思维导图 - {}", p.split('/').next_back().unwrap_or("文档")))
+            .unwrap_or_else(|| "思维导图".into()),
+        _ => "思维导图 - 新建文档".into(),
+    };
+    let _ = window.set_title(&title);
+    println!("[mindmap] 创建子窗口: label={}, title={}", window_label, title);
     Ok(label)
 }
 
