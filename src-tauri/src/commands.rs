@@ -514,7 +514,7 @@ pub fn create_new_window(
     mode: String,
     mmap_path: Option<String>,
 ) -> Result<String> {
-    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
     // 生成唯一 label
     let label = format!("doc-{}", chrono::Utc::now().timestamp_millis());
     // URL 携带参数,前端 App.tsx 解析后决定加载方式
