@@ -291,8 +291,18 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
                 let _ = window.hide();
                 api.prevent_close();
             } else {
-                println!("[window-event] 子窗口 {} 走默认关闭流程", label);
-                // 不 prevent_close,默认 destroy
+                // 子窗口:默认 close 流程在某些 macOS 环境下卡住,
+                // 导致 CloseRequested 无限循环触发。
+                // 修复:prevent + 主动 destroy,绕过默认流程。
+                println!("[window-event] 子窗口 {} prevent + destroy", label);
+                api.prevent_close();
+                // 用 spawn 异步 destroy,避免在 event handler 内同步销毁导致 panic
+                let win_clone = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    println!("[window-event] 异步 destroy 子窗口");
+                    let _ = win_clone.destroy();
+                });
             }
         }
         WindowEvent::Destroyed => {
