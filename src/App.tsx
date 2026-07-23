@@ -14,6 +14,7 @@ import { exportPng } from "./hooks/usePngExport";
 import { useWindowState } from "./hooks/useWindowState";
 import { useMcpBridge } from "./mcp/mcpBridge";
 import { initLlmBridge } from "./mcp/operationBridge";
+import LlmSessionBanner from "./components/LlmSessionBanner";
 import {
   initDevLogger,
   logUserAction,
@@ -47,6 +48,18 @@ function App() {
   useEffect(() => {
     initLlmBridge().catch(console.error);
   }, []);
+
+  // LLM 持锁时锁定画布(加 llm-active class)
+  const llmSession = useMindMapStore((s) => s.llmSession);
+  useEffect(() => {
+    const inner = document.querySelector(".mind-elixir-inner");
+    if (!inner) return;
+    if (llmSession?.session) {
+      inner.classList.add("llm-active");
+    } else {
+      inner.classList.remove("llm-active");
+    }
+  }, [llmSession]);
 
   // 全局快捷键：Cmd+Z 撤销 / Cmd+Shift+Z 重做
   useEffect(() => {
@@ -577,6 +590,7 @@ function App() {
       <StatusBar />
       <PreferencesModal />
       <ReminderToast />
+      <LlmSessionBanner />
     </div>
   );
 }

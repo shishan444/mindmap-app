@@ -1,0 +1,81 @@
+.llm-banner {
+  position: fixed;
+  top: 38px; /* 工具栏下方 */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #4c1d95 0%, #1e3a8a 100%);
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(76, 29, 149, 0.4);
+  border: 1px solid rgba(167, 139, 250, 0.5);
+}
+
+.llm-banner-icon {
+  font-size: 16px;
+  animation: llm-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes llm-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+.llm-banner-text strong {
+  font-weight: 600;
+}
+
+.llm-banner-takeover {
+  margin-left: 8px;
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.llm-banner-takeover:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: white;
+}
+
+.llm-banner-takeover:active {
+  transform: scale(0.96);
+}
+
+.llm-banner-error {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #fca5a5;
+}
+
+/* 紧急状态:剩余 ≤ 10s */
+.llm-banner-urgent {
+  background: linear-gradient(90deg, #7f1d1d 0%, #b45309 100%);
+  border-color: rgba(252, 165, 165, 0.6);
+  animation: llm-flash 0.8s ease-in-out infinite;
+}
+
+@keyframes llm-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+/* 画布锁定(LLM 持锁时) */
+.mind-elixir-inner.llm-active me-tpc,
+.mind-elixir-inner.llm-active .map-container {
+  pointer-events: none;
+}
+
+.mind-elixir-inner.llm-active {
+  opacity: 0.85;
+}
