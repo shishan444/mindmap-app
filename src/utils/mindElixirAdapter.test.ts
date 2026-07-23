@@ -293,3 +293,141 @@ describe("FE-ADAPT: 往返一致性（round-trip）", () => {
     expect(restored!.root.children[0].id).toBe("a");
   });
 });
+
+describe("FE-ADAPT: attached_file 保留(回归 - bug: Tab 添加节点后附件丢失)", () => {
+  const fakeAttached = {
+    uuid: "u1",
+    original_name: "pic.jpg",
+    ext: "jpg",
+    file_type: "image" as const,
+    size_bytes: 1024,
+    attached_at: "2026-07-20T00:00:00Z",
+  };
+
+  it("FE-ADAPT-31: nodeToMindElixirNode 输出 attached_file", () => {
+    const node = makeNode({ id: "n1", attached_file: fakeAttached });
+    const me = nodeToMindElixirNode(node);
+    expect(me.attached_file).toEqual(fakeAttached);
+  });
+
+  it("FE-ADAPT-32: fromMindElixirNode 从 prevContent 按 id 继承 attached_file", () => {
+    const me = { id: "n1", topic: "T", expanded: true, children: [] };
+    // mind-elixir nodeData 里没 attached_file
+    const map = new Map([["n1", fakeAttached]]);
+    const node = fromMindElixirNode(me, map);
+    expect(node.attached_file).toEqual(fakeAttached);
+  });
+
+  it("FE-ADAPT-33: ★bug 复现★ Tab 添加子节点后,父节点 attached_file 不丢", () => {
+    // 模拟用户场景:
+    // 1) 节点 A 有 attached_file(store.content.root.children[0])
+    const prevContent = makeContent({
+      root: makeNode({
+        id: "root",
+        topic: "根",
+        children: [
+          makeNode({ id: "A", topic: "A", attached_file: fakeAttached }),
+        ],
+      }),
+    });
+
+    // 2) 用户按 Tab → mind-elixir 给 A 添加了新子节点(同步过来的 nodeData)
+    //    注意:mind-elixir 不感知 attached_file,所以新 nodeData 里 A 没有 attached_file
+    const dataFromMindElixir = {
+      nodeData: {
+        id: "root",
+        topic: "根",
+        expanded: true,
+        children: [
+          {
+            id: "A",
+            topic: "A",
+            expanded: true,
+            children: [
+              { id: "new-child", topic: "新子节点", expanded: true, children: [] },
+            ],
+            // 注意:这里没 attached_file,模拟 mind-elixir 同步
+          },
+        ],
+      },
+    };
+
+    // 3) fromMindElixirData 应该从 prevContent 继承 A 的 attached_file
+    const newContent = fromMindElixirData(dataFromMindElixir, prevContent);
+    expect(newContent).not.toBeNull();
+    const nodeA = newContent!.root.children.find((c) => c.id === "A");
+    expect(nodeA, "节点 A 应该存在").toBeDefined();
+    expect(nodeA!.attached_file, "★ A 的 attached_file 不应丢失").toEqual(fakeAttached);
+    // 新子节点也正确添加
+    expect(nodeA!.children.length).toBe(1);
+    expect(nodeA!.children[0].id).toBe("new-child");
+  });
+
+  it("FE-ADAPT-34: 多层嵌套附件保留", () => {
+    const attached2 = { ...fakeAttached, uuid: "u2", original_name: "doc.pdf", ext: "pdf" };
+    const prevContent = makeContent({
+      root: makeNode({
+        id: "root",
+        topic: "根",
+        children: [
+          makeNode({
+            id: "A",
+            topic: "A",
+            attached_file: fakeAttached,
+            children: [
+              makeNode({ id: "B", topic: "B", attached_file: attached2 }),
+            ],
+          }),
+        ],
+      }),
+    });
+    // mind-elixir 同步过来(无 attached_file)
+    const data = {
+      nodeData: {
+        id: "root",
+        topic: "根",
+        expanded: true,
+        children: [
+          {
+            id: "A", topic: "A", expanded: true,
+            children: [{ id: "B", topic: "B", expanded: true, children: [] }],
+          },
+        ],
+      },
+    };
+    const newContent = fromMindElixirData(data, prevContent);
+    const nodeA = newContent!.root.children.find((c) => c.id === "A")!;
+    const nodeB = nodeA.children.find((c) => c.id === "B")!;
+    expect(nodeA.attached_file).toEqual(fakeAttached);
+    expect(nodeB.attached_file).toEqual(attached2);
+  });
+
+  it("FE-ADAPT-35: 节点被 mind-elixir 删除时,attached_file 也不再保留", () => {
+    // 验证:继承机制只对"还在的节点"生效,被删除的节点不会"复活"
+    const prevContent = makeContent({
+      root: makeNode({
+        id: "root",
+        topic: "根",
+        children: [
+          makeNode({ id: "A", topic: "A", attached_file: fakeAttached }),
+          makeNode({ id: "B", topic: "B" }),
+        ],
+      }),
+    });
+    // mind-elixir 删了 A(只剩 B)
+    const data = {
+      nodeData: {
+        id: "root",
+        topic: "根",
+        expanded: true,
+        children: [{ id: "B", topic: "B", expanded: true, children: [] }],
+      },
+    };
+    const newContent = fromMindElixirData(data, prevContent);
+    expect(newContent!.root.children.length).toBe(1);
+    expect(newContent!.root.children[0].id).toBe("B");
+    // A 真的被删了,不存在 attached_file 还留着的情况
+    const nodeA = newContent!.root.children.find((c) => c.id === "A");
+    expect(nodeA).toBeUndefined();
+  });
+});
