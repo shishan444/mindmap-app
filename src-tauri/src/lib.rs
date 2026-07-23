@@ -3,6 +3,7 @@ pub mod config;
 pub mod dev_logger;
 pub mod error;
 pub mod markdown;
+pub mod mcp;
 pub mod mmap;
 pub mod models;
 pub mod opml;
