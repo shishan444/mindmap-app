@@ -11,7 +11,9 @@
 //! IO 和 Tauri 集成在更上层做,方便单元测试。
 
 pub mod protocol;
+pub mod server;
 
 pub use protocol::{
     McpServer, Prompt, PromptArg, Request, Resource, RpcError, Response, Tool,
 };
+pub use server::{start_server, AppState, McpHttpHandle};
