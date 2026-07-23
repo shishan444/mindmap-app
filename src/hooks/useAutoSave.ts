@@ -34,6 +34,7 @@ export function useAutoSave() {
         timerRef.current = null;
         if (savingRef.current) return;
         savingRef.current = true;
+        let needsReschedule = false;
         try {
           const latest = useMindMapStore.getState();
           if (!latest.content || !latest.filePath) {
@@ -41,16 +42,33 @@ export function useAutoSave() {
             return;
           }
           latest.setSaveStatus("saving");
+          // ★ 记录 invoke 开始时的 content 引用
+          const contentRefAtInvokeStart = latest.content;
           await invoke("save_mmap", {
             path: latest.filePath,
-            content: latest.content,
+            content: contentRefAtInvokeStart,
           });
-          latest.markSaved();
+          // ★ 关键修复:只在 content 引用未变时才 markSaved
+          // 否则 invoke 期间发生的新改动会被"已保存"误覆盖,导致数据丢失
+          const after = useMindMapStore.getState();
+          if (after.content === contentRefAtInvokeStart) {
+            after.markSaved();
+          } else {
+            after.setSaveStatus("saved");
+            // dirty 保持 true,但 savingRef 当前还是 true,scheduleSave 会被拦截
+            // 标记 needsReschedule,finally 后(savingRef=false)主动重新调度
+            needsReschedule = true;
+          }
         } catch (e) {
           console.error("[auto-save] 失败", e);
           useMindMapStore.getState().setSaveStatus("error");
         } finally {
           savingRef.current = false;
+        }
+        // ★ invoke 期间发生新改动 → 主动重新调度保存
+        // 没有这步,被 savingRef 拦截的新改动永远不会被保存,导致数据丢失
+        if (needsReschedule) {
+          scheduleSave();
         }
       }, interval);
     };

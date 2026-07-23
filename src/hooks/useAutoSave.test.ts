@@ -216,4 +216,76 @@ describe("FE-AUTOSAVE: useAutoSave", () => {
     });
     expect(invoke).not.toHaveBeenCalled();
   });
+
+  // === 回归测试: 保存期间发生新改动,不应丢失 (bug: markSaved 覆盖) ===
+  // 用户场景: 改 topic → 自动保存触发 → 保存期间又改 → markSaved 把新改动吞掉 → 数据丢失
+  it("FE-AUTOSAVE-10: ★bug 复现★ invoke 期间 content 变化,dirty 不应被清零", async () => {
+    // 让 invoke 卡住,模拟保存进行中
+    let resolveSave: () => void;
+    const pending = new Promise<void>((r) => { resolveSave = r; });
+    vi.mocked(invoke).mockReturnValueOnce(pending as any);
+
+    const content = makeContent({ root: makeNode({ id: "n1", topic: "v1" }) });
+    useMindMapStore.getState().setContent(content);
+    useMindMapStore.getState().setFilePath("/tmp/test.mmap");
+    useMindMapStore.getState().markDirty();
+
+    const { unmount } = renderHook(() => useAutoSave());
+
+    // 触发自动保存(invoke pending 中)
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    // ★ invoke 期间,用户改了 topic(或 syncFromMindElixir 触发 setContent)
+    // 用 updateContent 模拟"用户改动"(会创建新 content 引用 + 设 dirty=true)
+    await act(async () => {
+      useMindMapStore.getState().updateContent((c) => {
+        c.root.topic = "v2";
+      });
+    });
+
+    // 当前 store 状态:content 引用已变,dirty=true
+    const stateBeforeResolve = useMindMapStore.getState();
+    expect(stateBeforeResolve.dirty).toBe(true);
+
+    // ★ resolve invoke
+    await act(async () => {
+      resolveSave!();
+      await Promise.resolve();
+    });
+
+    // ★ 关键断言:dirty 不应被清零(因为 invoke 期间有新改动)
+    // 旧 bug: invoke 完成后无条件 markSaved → dirty=false → 新改动永远不会被保存
+    const stateAfterResolve = useMindMapStore.getState();
+    expect(stateAfterResolve.dirty).toBe(true);
+
+    // 还应该再次触发自动保存(因为 dirty 还是 true)
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(invoke).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
+  it("FE-AUTOSAVE-11: invoke 期间 content 未变化,正常 markSaved", async () => {
+    // 对照组:invoke 期间没改动,正常 markSaved
+    const content = makeContent({ root: makeNode({ id: "n1", topic: "x" }) });
+    useMindMapStore.getState().setContent(content);
+    useMindMapStore.getState().setFilePath("/tmp/test.mmap");
+    useMindMapStore.getState().markDirty();
+
+    const { unmount } = renderHook(() => useAutoSave());
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    // invoke 完成,无新改动 → dirty=false
+    expect(useMindMapStore.getState().dirty).toBe(false);
+    expect(useMindMapStore.getState().saveStatus).toBe("saved");
+    unmount();
+  });
 });

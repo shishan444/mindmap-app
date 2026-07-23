@@ -282,8 +282,22 @@ function App() {
         setFilePath(selected);
       }
       state.setSaveStatus("saving");
-      await invoke("save_mmap", { path, content: c });
-      state.markSaved();
+      // ★ 关键:invoke 写盘和后续 markSaved 判断必须用同一个引用
+      // 否则 saveDialog 期间 store.content 变化会导致"写了旧的、判断用新的"→ 误 markSaved → 数据丢失
+      const contentRefAtInvokeStart = useMindMapStore.getState().content;
+      if (!contentRefAtInvokeStart) return;
+      await invoke("save_mmap", { path, content: contentRefAtInvokeStart });
+      // ★ 只在 content 引用未变时才 markSaved
+      // 否则 invoke 期间发生的新改动会被"已保存"误覆盖,useAutoSave 永远不会再保存
+      const after = useMindMapStore.getState();
+      if (after.content === contentRefAtInvokeStart) {
+        after.markSaved();
+      } else {
+        // invoke 期间检测到新改动:只更新 saveStatus,保留 dirty=true
+        // useAutoSave 会基于 dirty=true 继续防抖保存新内容
+        after.setSaveStatus("saved");
+        console.warn("[save] invoke 期间检测到新改动,保留 dirty=true 等待下次自动保存");
+      }
       // 添加到最近文件
       const name = path.split("/").pop()?.replace(/\.mmap$/, "") || "未命名";
       await invoke("add_recent_file", { path, name });
