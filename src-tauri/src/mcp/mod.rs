@@ -20,6 +20,7 @@ pub mod session;
 pub mod event_emitter;
 pub mod tools_session;
 pub mod tools_write;
+pub mod prompts;
 
 pub use protocol::{
     McpServer, Prompt, PromptArg, Request, Resource, RpcError, Response, Tool,
@@ -40,3 +41,4 @@ pub use tools_session::{
 pub use tools_write::{
     AttachFileTool, CreateNodeTool, DeleteNodeTool, MoveNodeTool, UpdateNodeTool, WriteToolContext,
 };
+pub use prompts::{ExpandTopicPrompt, FromMeetingNotesPrompt, SummarizeToOutlinePrompt};

@@ -200,6 +200,11 @@ pub fn run() {
                 server.register_tool(Box::new(crate::mcp::MoveNodeTool::new(write_ctx.clone())));
                 server.register_tool(Box::new(crate::mcp::AttachFileTool::new(write_ctx)));
 
+                // Prompts(Phase 3)
+                server.register_prompt(Box::new(crate::mcp::ExpandTopicPrompt));
+                server.register_prompt(Box::new(crate::mcp::FromMeetingNotesPrompt));
+                server.register_prompt(Box::new(crate::mcp::SummarizeToOutlinePrompt));
+
                 let app_state = crate::mcp::AppState {
                     server: std::sync::Arc::new(server),
                 };
