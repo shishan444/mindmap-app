@@ -65,6 +65,30 @@ for (const cat of ICON_CATEGORIES) {
   }
 }
 
+// === 附件节点固定尺寸 ===
+// 设计理由:
+//   - 让所有附件节点视觉一致,不继承 attach 前节点的尺寸
+//   - 80×80 正方形适合各种缩略图(图片/PDF/视频帧)
+//   - overflow:hidden 配合 CSS ellipsis 让长文件名自动截断(角标已显示扩展名兜底)
+//   - 只合并到现有 style(保留 TabStyle 设的 fontSize/color 等),不覆盖
+const ATTACH_FIXED_STYLE = {
+  width: "80px",
+  height: "80px",
+  overflow: "hidden",
+} as const;
+
+// 合并固定尺寸到 oldStyle,保留其他字段
+function withAttachFixedStyle(oldStyle: any): Record<string, string> {
+  return { ...(oldStyle || {}), ...ATTACH_FIXED_STYLE };
+}
+
+// 从 oldStyle 移除固定尺寸相关字段(用于移除附件时恢复自适应)
+function withoutAttachFixedStyle(oldStyle: any): Record<string, string> | undefined {
+  if (!oldStyle) return undefined;
+  const { width, height, overflow, ...rest } = oldStyle;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 function findNode(root: any, id: string | null): any | null {
   if (!root || !id) return null;
   if (root.id === id) return root;
@@ -104,12 +128,29 @@ export default function TabProperties() {
   ];
 
   const handleAttach = async (fileType: FileType, exts: string[]) => {
-    if (!filePath || !selectedId) return;
-    const selected = await openDialog({
-      multiple: false,
-      filters: [{ name: fileType, extensions: exts }],
-    });
-    if (typeof selected !== "string" || !selected) return;
+    if (!selectedId) {
+      alert("请先在画布上选中一个节点再附加文件。");
+      return;
+    }
+    if (!filePath) {
+      alert(
+        "附加文件需要先保存当前文档。\n请按 Cmd+S(或工具栏 💾 按钮)保存后再试。",
+      );
+      return;
+    }
+    let selected: string | null = null;
+    try {
+      const result = await openDialog({
+        multiple: false,
+        filters: [{ name: fileType, extensions: exts }],
+      });
+      selected = typeof result === "string" ? result : null;
+    } catch (e) {
+      console.error("[TabProperties] openDialog 失败", e);
+      alert("打开文件选择器失败: " + e);
+      return;
+    }
+    if (!selected) return;
     try {
       const attached = await invoke<AttachedFile>("attach_file_to_node", {
         mmapPath: filePath,
@@ -117,12 +158,16 @@ export default function TabProperties() {
         srcPath: selected,
       });
       // 更新 store.content,把 attached_file 写入对应节点 + topic 替换为文件名 stem
+      // + 设置固定尺寸 style(让附件节点视觉统一)
       const stem = attached.original_name.replace(new RegExp(`\\.${attached.ext}$`, "i"), "");
+      let newStyle: Record<string, string> = {};
       updateContent((c) => {
         const walk = (n: any): boolean => {
           if (n.id === selectedId) {
             n.attached_file = attached;
             n.topic = stem;
+            newStyle = withAttachFixedStyle(n.style);
+            n.style = newStyle;
             return true;
           }
           for (const child of n.children || []) {
@@ -132,7 +177,17 @@ export default function TabProperties() {
         };
         walk(c.root);
       });
+      // 同步到 mind-elixir 画布(立即生效,不等下一次 content 变化触发)
+      if (mind?.findEle && selectedId) {
+        try {
+          const tpc = mind.findEle(selectedId);
+          if (tpc) mind.reshapeNode(tpc, { style: newStyle });
+        } catch (e) {
+          console.error("[TabProperties] reshapeNode (attach) 失败", e);
+        }
+      }
     } catch (e) {
+      console.error("[TabProperties] attach_file_to_node 失败", e);
       alert("附加文件失败: " + e);
     }
   };
@@ -142,10 +197,14 @@ export default function TabProperties() {
     if (!confirm("确定移除附件?")) return;
     try {
       await invoke("remove_attached_file", { mmapPath: filePath, nodeId: selectedId });
+      // 移除附件时清除固定尺寸 style,让节点恢复自适应
+      let newStyle: Record<string, string> | undefined = undefined;
       updateContent((c) => {
         const walk = (n: any): boolean => {
           if (n.id === selectedId) {
             n.attached_file = undefined;
+            newStyle = withoutAttachFixedStyle(n.style);
+            n.style = newStyle;
             return true;
           }
           for (const child of n.children || []) {
@@ -155,6 +214,15 @@ export default function TabProperties() {
         };
         walk(c.root);
       });
+      // 同步到 mind-elixir(传空对象让 mind-elixir 清除固定尺寸)
+      if (mind?.findEle && selectedId) {
+        try {
+          const tpc = mind.findEle(selectedId);
+          if (tpc) mind.reshapeNode(tpc, { style: newStyle || {} });
+        } catch (e) {
+          console.error("[TabProperties] reshapeNode (remove) 失败", e);
+        }
+      }
     } catch (e) {
       alert("移除附件失败: " + e);
     }
@@ -170,11 +238,21 @@ export default function TabProperties() {
   };
 
   const handleReplaceAttached = async () => {
-    if (!filePath || !selectedId || !node.attached_file) return;
-    const selected = await openDialog({
-      multiple: false,
-    });
-    if (typeof selected !== "string" || !selected) return;
+    if (!selectedId || !node.attached_file) return;
+    if (!filePath) {
+      alert("替换附件需要先保存当前文档。\n请按 Cmd+S 保存后再试。");
+      return;
+    }
+    let selected: string | null = null;
+    try {
+      const result = await openDialog({ multiple: false });
+      selected = typeof result === "string" ? result : null;
+    } catch (e) {
+      console.error("[TabProperties] openDialog(替换) 失败", e);
+      alert("打开文件选择器失败: " + e);
+      return;
+    }
+    if (!selected) return;
     try {
       const attached = await invoke<AttachedFile>("replace_attached_file", {
         mmapPath: filePath,
@@ -197,6 +275,7 @@ export default function TabProperties() {
         walk(c.root);
       });
     } catch (e) {
+      console.error("[TabProperties] replace_attached_file 失败", e);
       alert("替换附件失败: " + e);
     }
   };
