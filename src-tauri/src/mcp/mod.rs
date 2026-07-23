@@ -38,5 +38,5 @@ pub use tools_session::{
     AcquireSessionTool, HeartbeatTool, ReleaseSessionTool, SessionToolContext,
 };
 pub use tools_write::{
-    CreateNodeTool, DeleteNodeTool, MoveNodeTool, UpdateNodeTool, WriteToolContext,
+    AttachFileTool, CreateNodeTool, DeleteNodeTool, MoveNodeTool, UpdateNodeTool, WriteToolContext,
 };

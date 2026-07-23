@@ -197,7 +197,8 @@ pub fn run() {
                 server.register_tool(Box::new(crate::mcp::CreateNodeTool::new(write_ctx.clone())));
                 server.register_tool(Box::new(crate::mcp::UpdateNodeTool::new(write_ctx.clone())));
                 server.register_tool(Box::new(crate::mcp::DeleteNodeTool::new(write_ctx.clone())));
-                server.register_tool(Box::new(crate::mcp::MoveNodeTool::new(write_ctx)));
+                server.register_tool(Box::new(crate::mcp::MoveNodeTool::new(write_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::AttachFileTool::new(write_ctx)));
 
                 let app_state = crate::mcp::AppState {
                     server: std::sync::Arc::new(server),

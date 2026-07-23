@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { applyOperation, type LlmOperation } from "./operationBridge";
+import { useMindMapStore } from "../store";
 
 // Mock mind-elixir instance
 function makeMockMind() {
@@ -67,11 +68,11 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     expect(mind.calls[0]).toBe("addChild:root:重要");
   });
 
-  it("create_node 父节点不存在抛错", () => {
+  it("create_node 父节点不存在抛错", async () => {
     const mind: any = makeMockMind();
-    expect(() =>
+    await expect(
       applyOperation(mind, makeOp("create_node", { parent_id: "nonexistent", topic: "x" })),
-    ).toThrow(/父节点/);
+    ).rejects.toThrow(/父节点/);
   });
 
   it("update_node 调 mind.reshapeNode", () => {
@@ -84,11 +85,11 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     expect(mind.calls[0]).toContain("改名");
   });
 
-  it("update_node 节点不存在抛错", () => {
+  it("update_node 节点不存在抛错", async () => {
     const mind: any = makeMockMind();
-    expect(() =>
+    await expect(
       applyOperation(mind, makeOp("update_node", { node_id: "no", patch: {} })),
-    ).toThrow(/节点 no/);
+    ).rejects.toThrow(/节点 no/);
   });
 
   it("delete_node 调 mind.removeNodes", () => {
@@ -106,11 +107,11 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     expect(mind.calls).toContain("moveNodeIn:n1->n2");
   });
 
-  it("move_node 目标父节点不存在抛错", () => {
+  it("move_node 目标父节点不存在抛错", async () => {
     const mind: any = makeMockMind();
-    expect(() =>
+    await expect(
       applyOperation(mind, makeOp("move_node", { node_id: "n1", to_parent_id: "no" })),
-    ).toThrow(/目标父节点/);
+    ).rejects.toThrow(/目标父节点/);
   });
 
   it("未知 op_type 不抛错只警告", () => {
@@ -122,12 +123,12 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     warnSpy.mockRestore();
   });
 
-  it("attach_file 暂未实现,警告不抛错", () => {
+  it("attach_file 无 filePath 时抛错", async () => {
     const mind: any = makeMockMind();
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    applyOperation(mind, makeOp("attach_file", { node_id: "n1" }));
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    useMindMapStore.setState({ filePath: null, content: null });
+    await expect(
+      applyOperation(mind, makeOp("attach_file", { node_id: "n1", file_path: "/tmp/x.txt" })),
+    ).rejects.toThrow(/需要先保存文档/);
   });
 });
 

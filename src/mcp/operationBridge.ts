@@ -39,8 +39,10 @@ export interface SessionChange {
 /**
  * 把 LLM op 转换为 mind-elixir API 调用
  * 抛错时回传给调用方(理论上应该回传给 Rust 让 LLM 知道)
+ *
+ * 注意:这是 async 函数(attach_file 需要调 Tauri command)
  */
-export function applyOperation(mind: any, op: LlmOperation): void {
+export async function applyOperation(mind: any, op: LlmOperation): Promise<void> {
   switch (op.op_type) {
     case "create_node": {
       const { parent_id, topic, priority, icons } = op.payload;
@@ -76,8 +78,41 @@ export function applyOperation(mind: any, op: LlmOperation): void {
       break;
     }
     case "attach_file": {
-      // Phase 3 实现
-      console.warn("[llm-bridge] attach_file 暂未实现,Phase 3 处理");
+      const { node_id, file_path } = op.payload;
+      const { invoke } = await import("@tauri-apps/api/core");
+      const state = useMindMapStore.getState();
+      const mmapPath = state.filePath;
+      if (!mmapPath) {
+        throw new Error("attach_file 需要先保存文档");
+      }
+      const attached = await invoke<any>("attach_file_to_node", {
+        mmapPath,
+        nodeId: node_id,
+        srcPath: file_path,
+      });
+      const stem = attached.original_name.replace(
+        new RegExp(`\\.${attached.ext}$`, "i"),
+        "",
+      );
+      state.updateContent((c) => {
+        const walk = (n: any): boolean => {
+          if (n.id === node_id) {
+            n.attached_file = attached;
+            n.topic = stem;
+            return true;
+          }
+          for (const child of n.children || []) {
+            if (walk(child)) return true;
+          }
+          return false;
+        };
+        walk(c.root);
+      });
+      setTimeout(() => {
+        if (typeof window !== "undefined" && (window as any).__syncAttachedFiles) {
+          (window as any).__syncAttachedFiles();
+        }
+      }, 50);
       break;
     }
     default:
@@ -113,11 +148,10 @@ export async function initLlmBridge(): Promise<void> {
       console.warn("[llm-bridge] mind 实例未就绪,丢弃 op:", op.op_id);
       return;
     }
-    try {
-      applyOperation(mind, op);
-    } catch (e) {
+    // async 调用,catch 错误
+    applyOperation(mind, op).catch((e) => {
       console.error("[llm-bridge] op 执行失败:", op, e);
-    }
+    });
   });
 
   // 订阅 llm-session-changed

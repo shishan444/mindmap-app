@@ -292,8 +292,61 @@ impl Tool for MoveNodeTool {
 }
 
 // ============================================================
-// 单元测试
+// attach_file(Phase 3)
 // ============================================================
+
+pub struct AttachFileTool {
+    ctx: WriteToolContext,
+}
+
+impl AttachFileTool {
+    pub fn new(ctx: WriteToolContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl Tool for AttachFileTool {
+    fn name(&self) -> &str {
+        "attach_file"
+    }
+    fn description(&self) -> &str {
+        "给节点附加文件(图片/PDF/视频等)。LLM 传 file_path,前端 bridge 调 attach_file_to_node 处理。必须先 acquire_session。"
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string"},
+                "node_id": {"type": "string"},
+                "file_path": {
+                    "type": "string",
+                    "description": "要附加的源文件绝对路径"
+                }
+            },
+            "required": ["session_id", "node_id", "file_path"]
+        })
+    }
+    fn call(&self, args: Value) -> Result<Value, RpcError> {
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RpcError::invalid_params(Some(json!("missing 'session_id'"))))?;
+        let node_id = args
+            .get("node_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RpcError::invalid_params(Some(json!("missing 'node_id'"))))?;
+        let file_path = args
+            .get("file_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RpcError::invalid_params(Some(json!("missing 'file_path'"))))?;
+
+        self.ctx.execute_op(
+            session_id,
+            "attach_file",
+            json!({"node_id": node_id, "file_path": file_path}),
+        )
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -515,6 +568,43 @@ mod tests {
         assert_eq!(ops[2].op_type, "delete_node");
     }
 
+    // --- attach_file ---
+
+    #[test]
+    fn test_attach_file_emits_op() {
+        let (ctx, emitter, sid) = make_ctx();
+        let tool = AttachFileTool::new(ctx);
+        tool.call(json!({
+            "session_id": sid,
+            "node_id": "n1",
+            "file_path": "/tmp/test.jpg"
+        }))
+        .unwrap();
+        let ops = emitter.operations_snapshot();
+        assert_eq!(ops[0].op_type, "attach_file");
+        assert_eq!(ops[0].payload["file_path"], "/tmp/test.jpg");
+    }
+
+    #[test]
+    fn test_attach_file_missing_file_path() {
+        let (ctx, _, sid) = make_ctx();
+        let tool = AttachFileTool::new(ctx);
+        let err = tool
+            .call(json!({"session_id": sid, "node_id": "n1"}))
+            .unwrap_err();
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn test_attach_file_missing_node_id() {
+        let (ctx, _, sid) = make_ctx();
+        let tool = AttachFileTool::new(ctx);
+        let err = tool
+            .call(json!({"session_id": sid, "file_path": "/x.jpg"}))
+            .unwrap_err();
+        assert_eq!(err.code, -32602);
+    }
+
     #[test]
     fn test_all_write_tools_have_correct_names() {
         let (ctx, _, _) = make_ctx();
@@ -522,9 +612,13 @@ mod tests {
             Box::new(CreateNodeTool::new(ctx.clone())),
             Box::new(UpdateNodeTool::new(ctx.clone())),
             Box::new(DeleteNodeTool::new(ctx.clone())),
-            Box::new(MoveNodeTool::new(ctx)),
+            Box::new(MoveNodeTool::new(ctx.clone())),
+            Box::new(AttachFileTool::new(ctx)),
         ];
         let names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
-        assert_eq!(names, vec!["create_node", "update_node", "delete_node", "move_node"]);
+        assert_eq!(
+            names,
+            vec!["create_node", "update_node", "delete_node", "move_node", "attach_file"]
+        );
     }
 }
