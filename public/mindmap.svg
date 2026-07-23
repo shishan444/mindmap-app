@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <filter id="g" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="c" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="60%" stop-color="#a5f3fc"/>
+      <stop offset="100%" stop-color="#67e8f9" stop-opacity="0.5"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#000"/>
+  <!-- 旋臂 1 -->
+  <path d="M128 128 C 145 120 165 120 180 130 C 200 145 215 165 215 190"
+        fill="none" stroke="#a5f3fc" stroke-width="6" stroke-linecap="round" filter="url(#g)"/>
+  <!-- 旋臂 2 -->
+  <path d="M128 128 C 111 136 91 136 76 126 C 56 111 41 91 41 66"
+        fill="none" stroke="#cffafe" stroke-width="6" stroke-linecap="round" filter="url(#g)"/>
+  <!-- 核心球 -->
+  <circle cx="128" cy="128" r="14" fill="url(#c)" filter="url(#g)"/>
+  <!-- 星团点 -->
+  <circle cx="215" cy="190" r="4" fill="#fff" filter="url(#g)"/>
+  <circle cx="41" cy="66" r="4" fill="#fff" filter="url(#g)"/>
+</svg>
