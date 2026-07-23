@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; width: 1024px; height: 1024px; overflow: hidden; }
+  .icon { width: 1024px; height: 1024px; display: block; position: relative;
+          border-radius: 224px; overflow: hidden; background: #000; }
+  /* 荧光:静态版本用 SVG filter 实现,避免 Chrome 截图时动画停在随机帧 */
+</style>
+</head>
+<body>
+<div class="icon">
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 荧光发光滤镜 -->
+    <filter id="glow-strong" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-medium" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 银河晕染径向渐变 -->
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.45"/>
+      <stop offset="30%" stop-color="#0891b2" stop-opacity="0.18"/>
+      <stop offset="70%" stop-color="#0f172a" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- 旋臂渐变(从核心明亮 → 末端淡出) -->
+    <linearGradient id="arm-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#a5f3fc"/>
+      <stop offset="100%" stop-color="#67e8f9" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="arm-grad-2" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#cffafe"/>
+      <stop offset="100%" stop-color="#a5f3fc" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- 核心球渐变 -->
+    <radialGradient id="core-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#e0f7fa"/>
+      <stop offset="100%" stop-color="#67e8f9" stop-opacity="0.6"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 背景晕染层 -->
+  <circle cx="512" cy="512" r="500" fill="url(#halo)"/>
+
+  <!-- 远处星尘(小颗粒背景星) -->
+  <g fill="#e0f7fa" opacity="0.6">
+    <circle cx="180" cy="220" r="1.5"/>
+    <circle cx="820" cy="180" r="1"/>
+    <circle cx="850" cy="780" r="2"/>
+    <circle cx="160" cy="800" r="1.5"/>
+    <circle cx="100" cy="500" r="1"/>
+    <circle cx="920" cy="500" r="1"/>
+    <circle cx="500" cy="100" r="1.5"/>
+    <circle cx="500" cy="920" r="1.5"/>
+    <circle cx="280" cy="120" r="1"/>
+    <circle cx="720" cy="140" r="1"/>
+    <circle cx="900" cy="350" r="1"/>
+    <circle cx="120" cy="380" r="1"/>
+    <circle cx="900" cy="680" r="1.5"/>
+    <circle cx="140" cy="680" r="1"/>
+    <circle cx="320" cy="900" r="1"/>
+    <circle cx="700" cy="890" r="1.5"/>
+    <circle cx="50" cy="280" r="1"/>
+    <circle cx="970" cy="280" r="1"/>
+    <circle cx="80" cy="720" r="1"/>
+    <circle cx="960" cy="720" r="1"/>
+    <circle cx="400" cy="70" r="0.8"/>
+    <circle cx="600" cy="60" r="1"/>
+    <circle cx="400" cy="960" r="1"/>
+    <circle cx="620" cy="950" r="0.8"/>
+  </g>
+
+  <!-- 旋臂 1(主臂,顺时针延伸) - 对数螺线 r = a·e^(b·θ),a=20, b=0.22 -->
+  <!-- 用密集四分之一弧拼接,平滑度更高 -->
+  <g filter="url(#glow-medium)">
+    <path d="M 512 512
+             C 580 480 640 470 700 490
+             C 770 510 820 560 850 620
+             C 880 690 880 770 850 830
+             C 820 890 760 920 690 920"
+          fill="none" stroke="url(#arm-grad-1)" stroke-width="10" stroke-linecap="round"/>
+    <!-- 旋臂 1 的次级分支 -->
+    <path d="M 580 480
+             C 600 440 620 420 650 410"
+          fill="none" stroke="#a5f3fc" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 700 490
+             C 720 450 740 430 770 425"
+          fill="none" stroke="#67e8f9" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 850 620
+             C 880 600 900 590 920 590"
+          fill="none" stroke="#a5f3fc" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  </g>
+
+  <!-- 旋臂 2(对称,逆时针延伸) -->
+  <g filter="url(#glow-medium)">
+    <path d="M 512 512
+             C 444 544 384 554 324 534
+             C 254 514 204 464 174 404
+             C 144 334 144 254 174 194
+             C 204 134 264 104 334 104"
+          fill="none" stroke="url(#arm-grad-2)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 444 544
+             C 424 584 404 604 374 614"
+          fill="none" stroke="#cffafe" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 324 534
+             C 304 574 284 594 254 599"
+          fill="none" stroke="#a5f3fc" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 174 404
+             C 144 424 124 434 104 434"
+          fill="none" stroke="#cffafe" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  </g>
+
+  <!-- 旋臂上的亮点节点(星团) -->
+  <g filter="url(#glow-strong)">
+    <!-- 旋臂 1 上的节点 -->
+    <circle cx="700" cy="490" r="8" fill="#ffffff"/>
+    <circle cx="850" cy="620" r="10" fill="#e0f7fa"/>
+    <circle cx="850" cy="830" r="7" fill="#a5f3fc"/>
+    <circle cx="690" cy="920" r="6" fill="#67e8f9"/>
+
+    <!-- 旋臂 2 上的节点 -->
+    <circle cx="324" cy="534" r="8" fill="#ffffff"/>
+    <circle cx="174" cy="404" r="10" fill="#cffafe"/>
+    <circle cx="174" cy="194" r="7" fill="#a5f3fc"/>
+    <circle cx="334" cy="104" r="6" fill="#67e8f9"/>
+  </g>
+
+  <!-- 次级亮点(更小,撒在臂上) -->
+  <g filter="url(#glow-soft)">
+    <circle cx="640" cy="475" r="3" fill="#ffffff"/>
+    <circle cx="780" cy="555" r="3" fill="#e0f7fa"/>
+    <circle cx="820" cy="730" r="3" fill="#a5f3fc"/>
+    <circle cx="780" cy="880" r="3" fill="#67e8f9"/>
+
+    <circle cx="384" cy="549" r="3" fill="#ffffff"/>
+    <circle cx="244" cy="469" r="3" fill="#cffafe"/>
+    <circle cx="204" cy="294" r="3" fill="#a5f3fc"/>
+    <circle cx="244" cy="144" r="3" fill="#67e8f9"/>
+  </g>
+
+  <!-- 核心(银河中心明亮球体) -->
+  <g filter="url(#glow-strong)">
+    <!-- 核心外圈晕染 -->
+    <circle cx="512" cy="512" r="80" fill="#67e8f9" opacity="0.25"/>
+    <circle cx="512" cy="512" r="55" fill="#a5f3fc" opacity="0.5"/>
+    <!-- 核心球体 -->
+    <circle cx="512" cy="512" r="38" fill="url(#core-grad)"/>
+    <!-- 核心高光 -->
+    <circle cx="500" cy="500" r="12" fill="#ffffff" opacity="0.9"/>
+  </g>
+
+  <!-- 最外圈淡晕(增加层次) -->
+  <circle cx="512" cy="512" r="120" fill="none" stroke="#67e8f9" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="512" cy="512" r="200" fill="none" stroke="#67e8f9" stroke-width="1" opacity="0.2"/>
+</svg>
+</div>
+</body>
+</html>
