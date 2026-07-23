@@ -8,10 +8,20 @@
  *
  * 真正"单一数据源":LLM 操作跟人编辑走完全相同的路径,
  * 自动复用 markDirty / setContent / attached_file 同步 / useAutoSave / save_mmap
+ *
+ * undo 整合(Phase 3):
+ * - LLM 会话期间 pause zundo(操作不进 undo 历史)
+ * - 会话结束(force_release / release / expired)时 resume + 手动 wrap
+ * - 用户按 Cmd+Z 一次撤销整个会话
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useMindMapStore } from "../store";
+
+// 模块级状态:记录 LLM 会话是否在 zundo pause 中
+let llmSessionPaused = false;
+// 记录会话开始时的 wrap state(zundo resume 时用)
+let preLlmSnapshot: any = null;
 
 export interface LlmOperation {
   op_id: string;
@@ -156,7 +166,41 @@ export async function initLlmBridge(): Promise<void> {
 
   // 订阅 llm-session-changed
   const unlisten2 = await listen<SessionChange>("llm-session-changed", (event) => {
-    useMindMapStore.getState().setLlmSession?.(event.payload);
+    const change = event.payload;
+    useMindMapStore.getState().setLlmSession?.(change);
+
+    // undo 整合:会话开始 pause,结束 resume + wrap
+    if (change.session && change.reason === "acquired") {
+      // 会话开始:记录 pre-snapshot + pause zundo
+      if (!llmSessionPaused) {
+        preLlmSnapshot = useMindMapStore.getState().content;
+        try {
+          useMindMapStore.temporal.getState().pause();
+          llmSessionPaused = true;
+        } catch (e) {
+          console.warn("[llm-bridge] zundo pause failed", e);
+        }
+      }
+    } else if (!change.session) {
+      // 会话结束(released/expired/forced):resume + wrap
+      if (llmSessionPaused) {
+        try {
+          useMindMapStore.temporal.getState().resume();
+          // 把整个会话期间的变化记录为 1 个 undo 单元
+          const postSnapshot = useMindMapStore.getState().content;
+          if (preLlmSnapshot && postSnapshot && preLlmSnapshot !== postSnapshot) {
+            useMindMapStore.temporal.getState().set(
+              { content: postSnapshot },
+              `LLM 会话: ${change.reason}`,
+            );
+          }
+        } catch (e) {
+          console.warn("[llm-bridge] zundo resume failed", e);
+        }
+        llmSessionPaused = false;
+        preLlmSnapshot = null;
+      }
+    }
   });
 
   unlisteners.push(unlisten1, unlisten2);

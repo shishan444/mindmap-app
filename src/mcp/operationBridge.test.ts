@@ -133,15 +133,25 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
 });
 
 describe("FE-MCP-BRIDGE: op 序列", () => {
-  it("多次 op 顺序调用对应 mind API", () => {
+  it("多次 op 顺序调用对应 mind API", async () => {
     const mind: any = makeMockMind();
-    applyOperation(mind, makeOp("create_node", { parent_id: "root", topic: "A" }));
-    applyOperation(mind, makeOp("update_node", { node_id: "n1", patch: { topic: "X" } }));
-    applyOperation(mind, makeOp("delete_node", { node_id: "n2" }));
+    await applyOperation(mind, makeOp("create_node", { parent_id: "root", topic: "A" }));
+    await applyOperation(mind, makeOp("update_node", { node_id: "n1", patch: { topic: "X" } }));
+    await applyOperation(mind, makeOp("delete_node", { node_id: "n2" }));
     expect(mind.calls).toEqual([
       "addChild:root:A",
       expect.stringMatching(/^reshapeNode:n1:/),
       "removeNodes:n2",
     ]);
+  });
+});
+
+describe("FE-MCP-BRIDGE: undo 整合(Phase 3)", () => {
+  it("session 变化不影响 applyOperation 的核心逻辑", async () => {
+    // undo 整合在 initLlmBridge 的 listen 回调里,不在 applyOperation
+    // 这里只验证 applyOperation 在无 session 状态下也能正常工作
+    const mind: any = makeMockMind();
+    await applyOperation(mind, makeOp("create_node", { parent_id: "root", topic: "x" }));
+    expect(mind.calls).toContain("addChild:root:x");
   });
 });
