@@ -130,6 +130,11 @@ pub fn run() {
 
             // === 启动 MCP server(Phase 2 完整集成,只在主窗口启动)===
             if is_main {
+                // 读 config.mcp 决定是否启用
+                let mcp_prefs = config::load_config().map(|c| c.mcp).unwrap_or_default();
+                if !mcp_prefs.enabled {
+                    println!("[mcp] config.mcp.enabled=false, 跳过 MCP server 启动");
+                } else {
                 let mirror = crate::mcp::shared_mirror();
                 app.manage(mirror.clone());
 
@@ -208,13 +213,14 @@ pub fn run() {
                 let app_state = crate::mcp::AppState {
                     server: std::sync::Arc::new(server),
                 };
-                let addr = "127.0.0.1:23456";
+                let addr = format!("127.0.0.1:{}", mcp_prefs.port);
                 tauri::async_runtime::spawn(async move {
-                    match crate::mcp::start_server(addr, app_state).await {
+                    match crate::mcp::start_server(&addr, app_state).await {
                         Ok(_) => println!("[mcp] server listening on http://{}", addr),
                         Err(e) => eprintln!("[mcp] server start failed: {}", e),
                     }
                 });
+                } // end if mcp_prefs.enabled
             }
 
             // === 初始化开发模式日志（Phase 12）===

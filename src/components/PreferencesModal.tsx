@@ -4,13 +4,14 @@ import { useMindMapStore } from "../store";
 import type { Config } from "../types";
 import "./PreferencesModal.css";
 
-type Tab = "general" | "reminder" | "appearance" | "export";
+type Tab = "general" | "reminder" | "appearance" | "export" | "mcp";
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "general", icon: "⚙", label: "通用" },
   { id: "reminder", icon: "⏰", label: "提醒" },
   { id: "appearance", icon: "🎨", label: "外观" },
   { id: "export", icon: "📤", label: "导出" },
+  { id: "mcp", icon: "🤖", label: "MCP" },
 ];
 
 export default function PreferencesModal() {
@@ -117,6 +118,7 @@ export default function PreferencesModal() {
           {activeTab === "export" && (
             <ExportTab draft={draft} update={update} />
           )}
+          {activeTab === "mcp" && <McpTab draft={draft} update={update} />}
         </div>
 
         {error && <div className="prefs-error">{error}</div>}
@@ -395,6 +397,81 @@ function ExportTab({ draft, update }: TabProps) {
           <option value={"\t"}>Tab</option>
           <option value={"    "}>4 空格</option>
         </select>
+      </label>
+    </div>
+  );
+}
+
+function McpTab({
+  draft,
+  update,
+}: {
+  draft: Config;
+  update: (path: (cfg: Config) => void) => void;
+}) {
+  return (
+    <div className="tab-pane">
+      <h3 className="section-title">🤖 MCP(LLM 协作)</h3>
+      <p className="prefs-hint">
+        启用后,LLM 客户端(Claude Desktop 等)可通过本机 HTTP 接入,读写思维导图。
+        <a
+          href="https://github.com/shishan444/mindmap-app/blob/main/docs/mcp-quickstart.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          配置指南
+        </a>
+      </p>
+
+      <label className="prefs-field">
+        <span>启用 MCP server</span>
+        <input
+          type="checkbox"
+          checked={draft.mcp.enabled}
+          onChange={(e) =>
+            update((c) => {
+              c.mcp.enabled = e.target.checked;
+            })
+          }
+        />
+        <small className="prefs-field-hint">
+          关闭后重启 app 生效。监听 127.0.0.1:{draft.mcp.port}(本机 only)
+        </small>
+      </label>
+
+      <label className="prefs-field">
+        <span>监听端口</span>
+        <input
+          type="number"
+          min={1024}
+          max={65535}
+          value={draft.mcp.port}
+          onChange={(e) =>
+            update((c) => {
+              const p = parseInt(e.target.value, 10);
+              if (!isNaN(p) && p >= 1024 && p <= 65535) c.mcp.port = p;
+            })
+          }
+        />
+      </label>
+
+      <label className="prefs-field">
+        <span>默认 LLM 会话 TTL(秒)</span>
+        <input
+          type="number"
+          min={1}
+          max={300}
+          value={draft.mcp.default_ttl_sec}
+          onChange={(e) =>
+            update((c) => {
+              const t = parseInt(e.target.value, 10);
+              if (!isNaN(t) && t >= 1 && t <= 300) c.mcp.default_ttl_sec = t;
+            })
+          }
+        />
+        <small className="prefs-field-hint">
+          LLM 持锁的最大时长。超时自动释放(用户可随时接管)。
+        </small>
       </label>
     </div>
   );
