@@ -15,6 +15,7 @@ import { useWindowState } from "./hooks/useWindowState";
 import { useMcpBridge } from "./mcp/mcpBridge";
 import { initLlmBridge } from "./mcp/operationBridge";
 import LlmSessionBanner from "./components/LlmSessionBanner";
+import LlmOperationHistory from "./components/LlmOperationHistory";
 import {
   initDevLogger,
   logUserAction,
@@ -591,6 +592,7 @@ function App() {
       <PreferencesModal />
       <ReminderToast />
       <LlmSessionBanner />
+      <LlmOperationHistory />
     </div>
   );
 }

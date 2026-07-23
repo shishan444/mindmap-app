@@ -153,6 +153,11 @@ export async function initLlmBridge(): Promise<void> {
   // 订阅 llm-operation
   const unlisten1 = await listen<LlmOperation>("llm-operation", (event) => {
     const op = event.payload;
+    // 记录到操作历史(便于侧栏显示)
+    useMindMapStore.getState().pushLlmOperation?.({
+      ...op,
+      received_at_ms: Date.now(),
+    });
     const mind = useMindMapStore.getState().mindInstance;
     if (!mind) {
       console.warn("[llm-bridge] mind 实例未就绪,丢弃 op:", op.op_id);

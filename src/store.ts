@@ -61,6 +61,10 @@ interface MindMapState {
   // LLM session 状态(MCP 用,Phase 2)
   llmSession: { session: any | null; reason: string } | null;
   setLlmSession: (change: { session: any | null; reason: string } | null) => void;
+
+  // LLM 操作历史(Phase 3,最多 100 条)
+  llmOperations: any[];
+  pushLlmOperation: (op: any) => void;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -190,6 +194,9 @@ export const useMindMapStore = create<MindMapState>()(
 
       llmSession: null,
       setLlmSession: (change) => set({ llmSession: change }),
+      llmOperations: [],
+      pushLlmOperation: (op) =>
+        set((s) => ({ llmOperations: [...s.llmOperations, op].slice(-100) })),
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）

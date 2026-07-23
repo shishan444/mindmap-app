@@ -1,0 +1,82 @@
+.llm-history-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 36px; /* 状态栏上方 */
+  width: 280px;
+  max-height: 320px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(76, 29, 149, 0.18);
+  z-index: 900;
+  font-size: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.llm-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, #4c1d95 0%, #1e3a8a 100%);
+  color: white;
+  font-weight: 600;
+}
+
+.llm-history-count {
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.llm-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.llm-history-item {
+  display: grid;
+  grid-template-columns: 20px 60px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.llm-history-item:hover {
+  background: #f9fafb;
+}
+
+.llm-history-item:last-child {
+  border-bottom: none;
+}
+
+.llm-history-icon {
+  font-size: 13px;
+}
+
+.llm-history-label {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.llm-history-detail {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.llm-history-time {
+  color: #9ca3af;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
