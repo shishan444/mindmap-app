@@ -7,7 +7,7 @@
 //! - 每次调用自动 heartbeat(刷新 TTL)
 //! - registry.record_operation 计数
 
-use crate::mcp::event_emitter::{gen_op_id, EventEmitter, LlmOperation};
+use crate::mcp::event_emitter::{gen_op_id, LlmOperation};
 use crate::mcp::protocol::{RpcError, Tool};
 use crate::mcp::tools_session::SessionToolContext;
 use serde_json::{json, Value};

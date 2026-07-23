@@ -85,6 +85,34 @@ pub fn gen_op_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// 生产用 TauriEmitter:通过 Tauri event 系统 emit
+pub struct TauriEmitter {
+    pub app: tauri::AppHandle,
+}
+
+impl TauriEmitter {
+    pub fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl EventEmitter for TauriEmitter {
+    fn emit_llm_operation(&self, op: LlmOperation) -> Result<(), RpcError> {
+        use tauri::Emitter;
+        self.app
+            .emit("llm-operation", &op)
+            .map_err(|e| RpcError::internal_error(Some(serde_json::json!(format!("{}", e)))))?;
+        Ok(())
+    }
+    fn emit_session_changed(&self, change: SessionChange) -> Result<(), RpcError> {
+        use tauri::Emitter;
+        self.app
+            .emit("llm-session-changed", &change)
+            .map_err(|e| RpcError::internal_error(Some(serde_json::json!(format!("{}", e)))))?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
