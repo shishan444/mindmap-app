@@ -385,6 +385,43 @@ pub fn ping() -> String {
     "pong".to_string()
 }
 
+// ===== MCP 状态推送(Phase 1 只读 MVP)=====
+
+/// 前端推送状态到后端 MCP 镜像
+/// 由 store.subscribe 触发,每次 store 变化时调用
+#[tauri::command]
+pub fn mcp_update_state(
+    mirror: tauri::State<'_, std::sync::Arc<crate::mcp::McpStateMirror>>,
+    content: Option<crate::models::Content>,
+    file_path: Option<String>,
+    reminders: Vec<crate::models::Reminder>,
+    edit_state: crate::mcp::EditState,
+) -> Result<()> {
+    mirror.update(content, file_path, reminders, edit_state);
+    Ok(())
+}
+
+// ===== MCP Phase 2 写操作 =====
+
+/// 用户强制接管:中断 LLM session,释放锁
+#[tauri::command]
+pub fn llm_force_release(
+    editor: tauri::State<'_, crate::mcp::EditorMode>,
+    registry: tauri::State<'_, crate::mcp::SessionRegistry>,
+    app: tauri::AppHandle,
+) -> Result<Option<String>> {
+    use tauri::Emitter;
+    let released = editor.force_release();
+    if let Some(ref sid) = released {
+        let info = registry.remove(sid);
+        let _ = app.emit("llm-session-changed", crate::mcp::SessionChange {
+            session: info,
+            reason: "forced".to_string(),
+        });
+    }
+    Ok(released)
+}
+
 /// 通用字节写入（用于 PNG 导出等场景）
 #[tauri::command]
 pub fn save_bytes(path: String, data: Vec<u8>) -> Result<()> {

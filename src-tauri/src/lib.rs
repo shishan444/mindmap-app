@@ -3,6 +3,7 @@ pub mod config;
 pub mod dev_logger;
 pub mod error;
 pub mod markdown;
+pub mod mcp;
 pub mod mmap;
 pub mod models;
 pub mod opml;
@@ -127,6 +128,101 @@ pub fn run() {
                 println!("[mindmap] 子窗口启动,跳过 reminder 调度器");
             }
 
+            // === 启动 MCP server(Phase 2 完整集成,只在主窗口启动)===
+            if is_main {
+                // 读 config.mcp 决定是否启用
+                let mcp_prefs = config::load_config().map(|c| c.mcp).unwrap_or_default();
+                if !mcp_prefs.enabled {
+                    println!("[mcp] config.mcp.enabled=false, 跳过 MCP server 启动");
+                } else {
+                let mirror = crate::mcp::shared_mirror();
+                app.manage(mirror.clone());
+
+                // Phase 2 状态:EditorMode + SessionRegistry + TauriEmitter
+                let editor = crate::mcp::EditorMode::new();
+                let registry = crate::mcp::SessionRegistry::new();
+                app.manage(editor.clone());
+                app.manage(registry.clone());
+
+                // 启动 TTL 后台 task
+                let editor_for_ttl = editor.clone();
+                let registry_for_ttl = registry.clone();
+                let app_handle_for_ttl = app.handle().clone();
+                tauri::async_runtime::spawn(crate::mcp::run_ttl_loop(
+                    editor_for_ttl,
+                    registry_for_ttl,
+                    move |expired_session_id| {
+                        use tauri::Emitter;
+                        let _ = app_handle_for_ttl.emit(
+                            "llm-session-changed",
+                            crate::mcp::SessionChange {
+                                session: None,
+                                reason: "expired".to_string(),
+                            },
+                        );
+                        // expired_session_id 留作 log
+                        eprintln!("[mcp] session {} TTL 过期,自动释放", expired_session_id);
+                    },
+                ));
+
+                // 构造 emitter
+                let emitter: std::sync::Arc<dyn crate::mcp::EventEmitter> =
+                    std::sync::Arc::new(crate::mcp::event_emitter::TauriEmitter::new(app.handle().clone()));
+
+                // 构造 server 并注册所有 tools
+                let mut server = crate::mcp::McpServer::new("mindmap-app", env!("CARGO_PKG_VERSION"));
+
+                // 只读 tools(用 mirror 数据源)
+                let readonly_source: std::sync::Arc<dyn crate::mcp::MindmapDataSource> = mirror.clone();
+                server.register_tool(Box::new(crate::mcp::ReadMindmapTool::new(readonly_source.clone())));
+                server.register_tool(Box::new(crate::mcp::SearchNodesTool::new(readonly_source.clone())));
+                server.register_tool(Box::new(crate::mcp::GetNodeTool::new(readonly_source.clone())));
+                server.register_tool(Box::new(crate::mcp::ListRemindersTool::new(readonly_source.clone())));
+                server.register_tool(Box::new(crate::mcp::ExportMindmapTool::new(readonly_source.clone())));
+                server.register_tool(Box::new(crate::mcp::GetEditStateTool::new(readonly_source)));
+
+                // 会话 tools
+                let session_ctx = crate::mcp::SessionToolContext::new(
+                    editor.clone(),
+                    registry.clone(),
+                    emitter.clone(),
+                );
+                server.register_tool(Box::new(crate::mcp::AcquireSessionTool::new(session_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::HeartbeatTool::new(session_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::ReleaseSessionTool::new(session_ctx)));
+
+                // 写 tools
+                let write_ctx = crate::mcp::WriteToolContext::new(
+                    crate::mcp::SessionToolContext::new(
+                        editor.clone(),
+                        registry.clone(),
+                        emitter.clone(),
+                    ),
+                );
+                server.register_tool(Box::new(crate::mcp::CreateNodeTool::new(write_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::UpdateNodeTool::new(write_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::DeleteNodeTool::new(write_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::MoveNodeTool::new(write_ctx.clone())));
+                server.register_tool(Box::new(crate::mcp::AttachFileTool::new(write_ctx)));
+
+                // Prompts(Phase 3)
+                server.register_prompt(Box::new(crate::mcp::ExpandTopicPrompt));
+                server.register_prompt(Box::new(crate::mcp::FromMeetingNotesPrompt));
+                server.register_prompt(Box::new(crate::mcp::SummarizeToOutlinePrompt));
+
+                let app_state = crate::mcp::AppState {
+                    server: std::sync::Arc::new(server),
+                };
+                let addr = format!("127.0.0.1:{}", mcp_prefs.port);
+                tauri::async_runtime::spawn(async move {
+                    match crate::mcp::start_server(&addr, app_state).await {
+                        Ok(_) => println!("[mcp] server listening on http://{}", addr),
+                        Err(e) => eprintln!("[mcp] server start failed: {}", e),
+                    }
+                });
+                } // end if mcp_prefs.enabled
+            }
+
             // === 初始化开发模式日志（Phase 12）===
             // 即使失败也不阻塞启动
             if let Err(e) = dev_logger::init() {
@@ -152,6 +248,8 @@ pub fn run() {
             commands::init_app_data,
             commands::path_exists,
             commands::ping,
+            commands::mcp_update_state,
+            commands::llm_force_release,
             commands::save_bytes,
             commands::export_markdown,
             commands::import_markdown_file,

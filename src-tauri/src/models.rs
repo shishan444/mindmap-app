@@ -409,6 +409,43 @@ pub struct Config {
     pub reminder: ReminderPrefs,
     #[serde(default)]
     pub export: ExportPrefs,
+    /// MCP server 配置(Phase 3)
+    #[serde(default)]
+    pub mcp: McpPrefs,
+}
+
+/// MCP 配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpPrefs {
+    /// 是否启用 MCP server
+    #[serde(default = "default_mcp_enabled")]
+    pub enabled: bool,
+    /// 监听端口
+    #[serde(default = "default_mcp_port")]
+    pub port: u16,
+    /// 默认 LLM 会话 TTL(秒)
+    #[serde(default = "default_mcp_ttl")]
+    pub default_ttl_sec: u32,
+}
+
+fn default_mcp_enabled() -> bool {
+    true
+}
+fn default_mcp_port() -> u16 {
+    23456
+}
+fn default_mcp_ttl() -> u32 {
+    60
+}
+
+impl Default for McpPrefs {
+    fn default() -> Self {
+        Self {
+            enabled: default_mcp_enabled(),
+            port: default_mcp_port(),
+            default_ttl_sec: default_mcp_ttl(),
+        }
+    }
 }
 
 fn default_config_version() -> String {
@@ -437,6 +474,7 @@ impl Default for Config {
             recent_files_max: default_recent_files_max(),
             reminder: ReminderPrefs::default(),
             export: ExportPrefs::default(),
+            mcp: McpPrefs::default(),
         }
     }
 }

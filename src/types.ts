@@ -99,6 +99,12 @@ export interface ExportPrefs {
   markdown_indent: string;
 }
 
+export interface McpPrefs {
+  enabled: boolean;
+  port: number;
+  default_ttl_sec: number;
+}
+
 export interface Config {
   version: string;
   last_open_dir?: string;
@@ -112,6 +118,7 @@ export interface Config {
   recent_files_max: number;
   reminder: ReminderPrefs;
   export: ExportPrefs;
+  mcp: McpPrefs;
 }
 
 export interface RecentFile {
