@@ -57,6 +57,10 @@ interface MindMapState {
   // 全局 reminders 缓存(用于画布渲染沙漏,定时刷新)
   allReminders: Reminder[];
   setAllReminders: (rs: Reminder[]) => void;
+
+  // LLM session 状态(MCP 用,Phase 2)
+  llmSession: { session: any | null; reason: string } | null;
+  setLlmSession: (change: { session: any | null; reason: string } | null) => void;
 }
 
 export const useMindMapStore = create<MindMapState>()(
@@ -183,6 +187,9 @@ export const useMindMapStore = create<MindMapState>()(
           }
         }, 50);
       },
+
+      llmSession: null,
+      setLlmSession: (change) => set({ llmSession: change }),
     }),
     {
       // 只跟踪 content 和 selectedNodeId 的变化（撤销重做依据）

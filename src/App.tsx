@@ -13,6 +13,7 @@ import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
 import { useWindowState } from "./hooks/useWindowState";
 import { useMcpBridge } from "./mcp/mcpBridge";
+import { initLlmBridge } from "./mcp/operationBridge";
 import {
   initDevLogger,
   logUserAction,
@@ -41,6 +42,11 @@ function App() {
   useWindowState();
   // 启用 MCP 桥接(推送状态到后端 MCP server)
   useMcpBridge();
+
+  // 启用 LLM operation bridge(订阅 llm-operation 事件)
+  useEffect(() => {
+    initLlmBridge().catch(console.error);
+  }, []);
 
   // 全局快捷键：Cmd+Z 撤销 / Cmd+Shift+Z 重做
   useEffect(() => {
