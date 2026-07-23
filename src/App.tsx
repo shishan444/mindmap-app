@@ -12,6 +12,7 @@ import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
 import { useWindowState } from "./hooks/useWindowState";
+import { useMcpBridge } from "./mcp/mcpBridge";
 import {
   initDevLogger,
   logUserAction,
@@ -38,6 +39,8 @@ function App() {
   useAutoSave();
   // 启用窗口状态恢复/保存
   useWindowState();
+  // 启用 MCP 桥接(推送状态到后端 MCP server)
+  useMcpBridge();
 
   // 全局快捷键：Cmd+Z 撤销 / Cmd+Shift+Z 重做
   useEffect(() => {

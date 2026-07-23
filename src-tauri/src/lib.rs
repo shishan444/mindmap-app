@@ -128,6 +128,32 @@ pub fn run() {
                 println!("[mindmap] 子窗口启动,跳过 reminder 调度器");
             }
 
+            // === 启动 MCP server(Phase 1 只读 MVP,只在主窗口启动)===
+            if is_main {
+                let mirror = crate::mcp::shared_mirror();
+                app.manage(mirror.clone());
+
+                let mut server = crate::mcp::McpServer::new("mindmap-app", env!("CARGO_PKG_VERSION"));
+                let source: std::sync::Arc<dyn crate::mcp::MindmapDataSource> = mirror.clone();
+                server.register_tool(Box::new(crate::mcp::ReadMindmapTool::new(source.clone())));
+                server.register_tool(Box::new(crate::mcp::SearchNodesTool::new(source.clone())));
+                server.register_tool(Box::new(crate::mcp::GetNodeTool::new(source.clone())));
+                server.register_tool(Box::new(crate::mcp::ListRemindersTool::new(source.clone())));
+                server.register_tool(Box::new(crate::mcp::ExportMindmapTool::new(source.clone())));
+                server.register_tool(Box::new(crate::mcp::GetEditStateTool::new(source)));
+
+                let app_state = crate::mcp::AppState {
+                    server: std::sync::Arc::new(server),
+                };
+                let addr = "127.0.0.1:23456";
+                tauri::async_runtime::spawn(async move {
+                    match crate::mcp::start_server(addr, app_state).await {
+                        Ok(_) => println!("[mcp] server listening on http://{}", addr),
+                        Err(e) => eprintln!("[mcp] server start failed: {}", e),
+                    }
+                });
+            }
+
             // === 初始化开发模式日志（Phase 12）===
             // 即使失败也不阻塞启动
             if let Err(e) = dev_logger::init() {
@@ -153,6 +179,7 @@ pub fn run() {
             commands::init_app_data,
             commands::path_exists,
             commands::ping,
+            commands::mcp_update_state,
             commands::save_bytes,
             commands::export_markdown,
             commands::import_markdown_file,

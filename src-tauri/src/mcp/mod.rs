@@ -14,6 +14,7 @@ pub mod protocol;
 pub mod server;
 pub mod data_source;
 pub mod tools_readonly;
+pub mod tauri_source;
 
 pub use protocol::{
     McpServer, Prompt, PromptArg, Request, Resource, RpcError, Response, Tool,
@@ -24,3 +25,4 @@ pub use tools_readonly::{
     ExportMindmapTool, GetEditStateTool, GetNodeTool, ListRemindersTool, ReadMindmapTool,
     SearchNodesTool,
 };
+pub use tauri_source::{shared_mirror, McpStateMirror};

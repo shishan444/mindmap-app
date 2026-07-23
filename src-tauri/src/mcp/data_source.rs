@@ -8,15 +8,15 @@ use crate::models::{Content, Reminder};
 use serde::{Deserialize, Serialize};
 
 /// 当前编辑状态(用于 get_edit_state tool)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EditState {
     /// 当前编辑者:"human" / "llm" / "idle"
     pub editor: String,
     /// LLM 会话信息(若 editor == "llm")
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub session: Option<LlmSessionInfo>,
     /// 当前打开的文件路径(若有)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub file_path: Option<String>,
 }
 
