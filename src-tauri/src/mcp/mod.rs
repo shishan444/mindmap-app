@@ -16,6 +16,7 @@ pub mod data_source;
 pub mod tools_readonly;
 pub mod tauri_source;
 pub mod editor_mode;
+pub mod session;
 
 pub use protocol::{
     McpServer, Prompt, PromptArg, Request, Resource, RpcError, Response, Tool,
@@ -28,3 +29,4 @@ pub use tools_readonly::{
 };
 pub use tauri_source::{shared_mirror, McpStateMirror};
 pub use editor_mode::{Editor, EditorMode, DEFAULT_TTL_MS, MAX_TTL_MS};
+pub use session::{run_ttl_loop, SessionInfo, SessionRegistry};
