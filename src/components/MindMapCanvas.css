@@ -199,6 +199,46 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2395a5a6' stroke-width='2.5' stroke-dasharray='4 4'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E");
 }
 
+/* === 附件类型视觉编码(便于一眼识别文件类型) === */
+/* 设计:
+ *   - 左边框 4px 类型色:跟 priority 设计风格统一(都是左边框)
+ *   - 右下角扩展名角标:文字辅助识别(满足 color-not-only 原则)
+ *   - 用 CSS 变量 --attached-type-color,父子元素共享类型色
+ */
+.attached-render {
+  box-sizing: border-box !important;
+  border-left: 4px solid var(--attached-type-color, #6b7280) !important;
+}
+
+/* 8 种类型 → 8 个色(色相均匀分布,避免相近色混淆) */
+.attached-render[data-file-type="image"] { --attached-type-color: #10b981; } /* emerald 绿 */
+.attached-render[data-file-type="pdf"]   { --attached-type-color: #ef4444; } /* red 红(Adobe PDF 品牌色) */
+.attached-render[data-file-type="slide"] { --attached-type-color: #f59e0b; } /* amber 橙黄 */
+.attached-render[data-file-type="doc"]   { --attached-type-color: #3b82f6; } /* blue 蓝(Word 蓝) */
+.attached-render[data-file-type="sheet"] { --attached-type-color: #84cc16; } /* lime 黄绿(Excel 绿,与 image 区分:偏黄) */
+.attached-render[data-file-type="video"] { --attached-type-color: #a855f7; } /* purple 紫 */
+.attached-render[data-file-type="audio"] { --attached-type-color: #ec4899; } /* pink 粉(音乐感) */
+.attached-render[data-file-type="other"] { --attached-type-color: #6b7280; } /* gray 灰 */
+
+/* 扩展名角标:右下角小标签,继承父 render 的类型色 */
+.attached-ext-tag {
+  position: absolute !important;
+  right: 2px !important;
+  bottom: 2px !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: var(--attached-type-color, #6b7280) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 1px 4px !important;
+  border-radius: 2px !important;
+  border: 1px solid var(--attached-type-color, #6b7280) !important;
+  font-family: -apple-system, system-ui, sans-serif !important;
+  letter-spacing: 0.3px !important;
+  pointer-events: none !important;
+  line-height: 1.2 !important;
+  z-index: 10 !important;
+}
+
 /* === Hourglass Icon (节点 reminder 状态标识) === */
 /* 沙漏容器:absolute 定位到 tpc 父元素外部右上角 */
 

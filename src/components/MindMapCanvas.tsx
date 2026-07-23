@@ -104,6 +104,7 @@ function buildLowerSandPath(ratio: number): string {
 // 按 attached_file.file_type 差异化渲染:
 // - image/pdf/slide/doc/sheet → 显示真实缩略图(<img>)
 // - video/audio/other → 显示类型图标(SVG)
+// - 所有类型:加类型色左边框 + 右下角扩展名角标(便于一眼识别)
 function syncAttachedFiles(inst: any, state: any) {
   if (!inst || !state.content) return;
   const mmapPath = state.filePath;
@@ -119,8 +120,10 @@ function syncAttachedFiles(inst: any, state: any) {
       return;
     }
     // 创建渲染容器(覆盖在 tpc 内部)
+    // data-file-type 用于 CSS 选择类型色边框(--attached-type-color)
     const render = document.createElement("div");
     render.className = "attached-render";
+    render.dataset.fileType = attached.file_type;
     render.style.cssText =
       "position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;background:#fff;";
 
@@ -152,6 +155,12 @@ function syncAttachedFiles(inst: any, state: any) {
       // 视频/音频/其他 — 显示类型图标
       render.innerHTML = fileIconSvg(attached.file_type);
     }
+
+    // 扩展名角标(右下角小标签,显示 .PDF/.MP4 等,辅助识别)
+    const extTag = document.createElement("div");
+    extTag.className = "attached-ext-tag";
+    extTag.textContent = (attached.ext || "?").toUpperCase();
+    render.appendChild(extTag);
 
     const host = tpc;
     if (host && getComputedStyle(host).position === "static") {
