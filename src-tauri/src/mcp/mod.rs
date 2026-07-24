@@ -21,6 +21,7 @@ pub mod event_emitter;
 pub mod tools_session;
 pub mod tools_write;
 pub mod prompts;
+pub mod audit_log;
 
 pub use protocol::{
     McpServer, Prompt, PromptArg, Request, Resource, RpcError, Response, Tool,
@@ -34,7 +35,8 @@ pub use tools_readonly::{
 pub use tauri_source::{shared_mirror, McpStateMirror};
 pub use editor_mode::{Editor, EditorMode, DEFAULT_TTL_MS, MAX_TTL_MS};
 pub use session::{run_ttl_loop, SessionInfo, SessionRegistry};
-pub use event_emitter::{gen_op_id, EventEmitter, LlmOperation, MockEmitter, SessionChange};
+pub use event_emitter::{gen_op_id, EventEmitter, LlmOperation, MockEmitter, MultiEmitter, SessionChange};
+pub use audit_log::AuditLogger;
 pub use tools_session::{
     AcquireSessionTool, HeartbeatTool, ReleaseSessionTool, SessionToolContext,
 };

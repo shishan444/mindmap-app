@@ -165,9 +165,15 @@ pub fn run() {
                     },
                 ));
 
-                // 构造 emitter
-                let emitter: std::sync::Arc<dyn crate::mcp::EventEmitter> =
+                // 构造 emitter:同时发到 Tauri event(前端)+ 审计日志
+                let tauri_emitter: std::sync::Arc<dyn crate::mcp::EventEmitter> =
                     std::sync::Arc::new(crate::mcp::event_emitter::TauriEmitter::new(app.handle().clone()));
+                let audit_emitter: std::sync::Arc<dyn crate::mcp::EventEmitter> =
+                    std::sync::Arc::new(crate::mcp::AuditLogger::new(
+                        crate::mcp::audit_log::AuditLogger::default_path(),
+                    ));
+                let emitter: std::sync::Arc<dyn crate::mcp::EventEmitter> =
+                    std::sync::Arc::new(crate::mcp::MultiEmitter::new(vec![tauri_emitter, audit_emitter]));
 
                 // 构造 server 并注册所有 tools
                 let mut server = crate::mcp::McpServer::new("mindmap-app", env!("CARGO_PKG_VERSION"));

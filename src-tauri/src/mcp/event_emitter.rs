@@ -85,6 +85,44 @@ pub fn gen_op_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// MultiEmitter:把事件同时发给多个 emitter(比如 TauriEmitter + AuditLogger)
+pub struct MultiEmitter {
+    pub emitters: Vec<std::sync::Arc<dyn EventEmitter>>,
+}
+
+impl MultiEmitter {
+    pub fn new(emitters: Vec<std::sync::Arc<dyn EventEmitter>>) -> Self {
+        Self { emitters }
+    }
+}
+
+impl EventEmitter for MultiEmitter {
+    fn emit_llm_operation(&self, op: LlmOperation) -> Result<(), RpcError> {
+        let mut last_err = None;
+        for e in &self.emitters {
+            if let Err(e) = e.emit_llm_operation(op.clone()) {
+                last_err = Some(e);
+            }
+        }
+        if let Some(e) = last_err {
+            return Err(e);
+        }
+        Ok(())
+    }
+    fn emit_session_changed(&self, change: SessionChange) -> Result<(), RpcError> {
+        let mut last_err = None;
+        for e in &self.emitters {
+            if let Err(e) = e.emit_session_changed(change.clone()) {
+                last_err = Some(e);
+            }
+        }
+        if let Some(e) = last_err {
+            return Err(e);
+        }
+        Ok(())
+    }
+}
+
 /// 生产用 TauriEmitter:通过 Tauri event 系统 emit
 pub struct TauriEmitter {
     pub app: tauri::AppHandle,
