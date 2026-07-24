@@ -263,3 +263,28 @@ window.__mind.addChild(window.__mind.currentNode)
 ---
 
 **下一步**:确认上面 3 个决策点后,进入 Phase 1 实施(只读 MVP,3-5 天)。
+
+---
+
+## 设计修正记录(2026-07-23 v1.1)
+
+### undo 整合的真实行为
+
+之前承诺"一次 Cmd+Z 撤销整个 LLM 会话"。代码层验证后,zundo 没有原生 wrap API,实际行为是:
+- LLM 会话开始(acquired)→ `temporal.pause()`(操作不进 undo 历史)
+- LLM 操作期间 → 画布正常刷新,但不污染 undo 历史
+- LLM 会话结束(released/expired/forced)→ `temporal.resume()`
+- 用户按 Cmd+Z → 撤回到**会话开始前的状态**(中间状态全部跳过)
+
+**净效果**:Cmd+Z 一次跳过整个会话,但中间状态无法逐步撤销。如果用户想看 LLM 中间过程,需要操作历史侧栏(显示每一步,但只能整体撤销)。
+
+**承诺差异**:从"撤销整段"细化为"跳过整段",语义更精确,但用户体验核心价值不变(用户能"取消"整个 LLM 会话)。
+
+### 工程基础设施(超 plan 范围,补全)
+
+- CI workflow(GitHub Actions):tsc + vitest + cargo test
+- pre-commit / pre-push hook(husky)
+- feature/flow coverage 自动检查(95% 门槛)
+- LLM 审计日志(`~/Library/Application Support/MindMap/llm-audit.jsonl`)
+- read_mindmap path 参数(跨文档读取)
+- 真实 MCP 接入验证脚本(`scripts/verify-mcp-live.sh`,8 条链路全通)
