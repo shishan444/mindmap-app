@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# pre-commit:轻量检查,只跑类型检查 + lint-staged
+npx tsc --noEmit || { echo "✗ TypeScript check failed"; exit 1; }
+npx lint-staged || { echo "✗ lint-staged failed"; exit 1; }

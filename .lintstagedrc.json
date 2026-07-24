@@ -1,0 +1,3 @@
+{
+  "*.{ts,tsx,css,md,json}": ["echo '[lint-staged] skip (no eslint/prettier configured)'"]
+}

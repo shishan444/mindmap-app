@@ -20,7 +20,7 @@
     "test:all": "npm run test:fe && npm run test:be && npm run build",
     "test:regression": "npm run test:all",
     "test:watch:all": "concurrently -n fe,be -c blue,green \"vitest\" \"cd src-tauri && (cargo watch -x test -w src 2>/dev/null || echo '[skip] cargo-watch 未安装：cargo install cargo-watch')\"",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config --local core.hooksPath .githooks && chmod +x .githooks/* || true"
+    "prepare": "husky"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -47,7 +47,9 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.3",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
+    "lint-staged": "^17.2.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^4.1.10"

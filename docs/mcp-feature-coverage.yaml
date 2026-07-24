@@ -1,0 +1,133 @@
+# MCP 功能点覆盖率清单
+#
+# 匹配规则(check-coverage.cjs):
+# 每个 feature 的 keywords 任一出现在测试名里即算覆盖
+# Rust 测试名是 snake_case,FE 测试名是中文 + 模块前缀,所以 keywords 列多种形式
+
+features:
+  # === Phase 1: 只读 MVP ===
+  - id: F-P1-01
+    name: initialize
+    keywords: [initialize, "test_initialize", "init_returns"]
+
+  - id: F-P1-02
+    name: tools/list
+    keywords: [tools_list, "tools/list"]
+
+  - id: F-P1-03
+    name: tools/call
+    keywords: [tools_call, "tools/call", "tool_failure"]
+
+  - id: F-P1-04
+    name: resources/list
+    keywords: [resources_list, "resources/list"]
+
+  - id: F-P1-05
+    name: resources/read
+    keywords: [resources_read, "resources/read"]
+
+  - id: F-P1-06
+    name: read_mindmap
+    keywords: [read_mindmap]
+
+  - id: F-P1-07
+    name: search_nodes
+    keywords: [search_nodes]
+
+  - id: F-P1-08
+    name: get_node
+    keywords: [get_node]
+
+  - id: F-P1-09
+    name: list_reminders
+    keywords: [list_reminders]
+
+  - id: F-P1-10
+    name: export_mindmap
+    keywords: [export_mindmap, "export_markdown", "export_opml", "export_mermaid"]
+
+  - id: F-P1-11
+    name: get_edit_state
+    keywords: [edit_state]
+
+  # === Phase 2: 互斥写 ===
+  - id: F-P2-01
+    name: acquire_session
+    keywords: [acquire_returns, acquire_default, acquire_custom, acquire_missing, acquire_emits, acquire_second]
+
+  - id: F-P2-02
+    name: heartbeat
+    keywords: [heartbeat_extends, heartbeat_unknown, heartbeat_missing]
+
+  - id: F-P2-03
+    name: release_session
+    keywords: [release_lets, release_wrong, release_emits]
+
+  - id: F-P2-04
+    name: TTL 自动 release
+    keywords: [ttl_expiry_releases, ttl_loop_expires, ttl_loop_no_expiry]
+
+  - id: F-P2-05
+    name: llm_force_release
+    keywords: [force_release_always, force_release_when_human]
+
+  - id: F-P2-06
+    name: create_node
+    keywords: [create_node_emits, create_node_with_priority, create_node_missing, create_node_without_session]
+
+  - id: F-P2-07
+    name: update_node
+    keywords: [update_node_emits, update_node_missing]
+
+  - id: F-P2-08
+    name: delete_node
+    keywords: [delete_node_emits, delete_node_missing]
+
+  - id: F-P2-09
+    name: move_node
+    keywords: [move_node_emits, move_node_missing]
+
+  - id: F-P2-10
+    name: operationBridge 订阅
+    keywords: [applyOperation, FE-MCP-BRIDGE]
+
+  - id: F-P2-11
+    name: operationBridge 调 mind-elixir API
+    keywords: [addChild, reshapeNode, removeNodes, moveNodeIn]
+
+  - id: F-P2-12
+    name: LlmSessionBanner
+    keywords: [FE-LLM-BANNER, LlmSessionBanner, banner]
+
+  - id: F-P2-13
+    name: 画布 llm-active 锁定
+    keywords: [llm-active, llm_active, canvas_locks]
+
+  # === Phase 3: 协作体验 ===
+  - id: F-P3-01
+    name: attach_file
+    keywords: [attach_file_emits, attach_file_missing]
+
+  - id: F-P3-02
+    name: expand_topic prompt
+    keywords: [expand_topic]
+
+  - id: F-P3-03
+    name: from_meeting_notes prompt
+    keywords: [from_meeting_notes]
+
+  - id: F-P3-04
+    name: summarize_to_outline prompt
+    keywords: [summarize_to_outline]
+
+  - id: F-P3-05
+    name: undo 整合
+    keywords: [undo, zundo, pause, resume]
+
+  - id: F-P3-06
+    name: LlmOperationHistory
+    keywords: [FE-LLM-HISTORY, LlmOperationHistory]
+
+  - id: F-P3-07
+    name: 设置面板 MCP tab
+    keywords: [McpTab, mcp_tab, MCP tab]

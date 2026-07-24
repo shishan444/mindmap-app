@@ -1,0 +1,44 @@
+# MCP 链路覆盖率清单
+#
+# 8 条核心链路,每条用 keywords 匹配实际测试名
+
+flows:
+  - id: L1
+    name: 连接链路
+    description: LLM 客户端 → HTTP /mcp → initialize → 列 tools
+    keywords: [initialize, invalid_jsonrpc, unknown_method, health_returns_200, mcp_endpoint_initialize]
+
+  - id: L2
+    name: 只读链路
+    description: LLM → read_mindmap → 返回树
+    keywords: [read_mindmap, search_nodes, get_node]
+
+  - id: L3
+    name: acquire 链路
+    description: LLM → acquire_session → Rust check EditorMode → 返回 session_id
+    keywords: [acquire_returns, acquire_second_fails, acquire_missing]
+
+  - id: L4
+    name: 写链路
+    description: LLM → create_node → 前端 bridge → mind.addChild → 自动保存
+    keywords: [create_node, addChild, create_node_without_session]
+
+  - id: L5
+    name: 心跳链路
+    description: LLM → heartbeat → Rust 续约 TTL
+    keywords: [heartbeat_extends, heartbeat_unknown]
+
+  - id: L6
+    name: 超时链路
+    description: LLM 60s 无心跳 → 后台 task 检测 → 自动释放
+    keywords: [ttl_loop_expires, ttl_loop_no_expiry, ttl_expiry_releases]
+
+  - id: L7
+    name: 接管链路
+    description: 用户点 ✋ 接管 → Tauri command → Rust force_release → LLM 失败
+    keywords: [force_release, llm_force_release]
+
+  - id: L8
+    name: undo 链路
+    description: LLM 会话期间 zundo pause → N 次操作 → 会话结束 resume
+    keywords: [undo, zundo, pause, resume]

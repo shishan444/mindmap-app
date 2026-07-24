@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/mcp-server]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (vitest + tsc)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Run vitest
+        run: npm run test:fe -- --reporter=verbose
+      - name: Feature/flow coverage gate
+        run: node scripts/check-coverage.js
+
+  rust:
+    name: Rust (cargo test)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Run cargo test
+        run: |
+          cd src-tauri
+          cargo test --lib --verbose
+
+  build:
+    name: Tauri build smoke test
+    runs-on: macos-latest
+    needs: [frontend, rust]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Tauri build(只验证能编译,不打包 dmg 节省时间)
+        run: |
+          cd src-tauri
+          cargo build --release --lib
