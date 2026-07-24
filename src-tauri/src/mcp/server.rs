@@ -23,8 +23,13 @@ use axum::{
 use std::sync::Arc;
 
 /// MCP server 句柄(由 Tauri app 持有)
+///
+/// 设计:持有 JoinHandle 而非 shutdown sender,
+/// 因为 oneshot Sender drop 会触发 graceful_shutdown 关闭 server。
+/// 我们希望 server 跟随 app 进程生命周期(进程退出时自动结束),
+/// 不需要显式 shutdown。
 pub struct McpHttpHandle {
-    pub shutdown: tokio::sync::oneshot::Sender<()>,
+    pub _task: tokio::task::JoinHandle<()>,
 }
 
 /// 共享状态:封装 McpServer(Arc 让 axum handler 可克隆)
@@ -78,33 +83,22 @@ pub fn build_router(state: AppState) -> Router {
 
 /// 启动 HTTP server(非阻塞,返回 handle 用于关闭)
 ///
-/// 用法:
-/// ```ignore
-/// let state = AppState { server: Arc::new(server) };
-/// let handle = start_server("127.0.0.1:23456", state).await?;
-/// // ... app 运行期间 server 持续监听
-/// handle.shutdown.send(()).ok();  // 关闭
-/// ```
+/// 设计:JoinHandle 不带 graceful shutdown,
+/// server 跟随 app 进程生命周期(进程退出时自动结束)。
 pub async fn start_server(
     addr: &str,
     state: AppState,
 ) -> Result<McpHttpHandle, std::io::Error> {
     let router = build_router(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
-    tokio::spawn(async move {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(async move {
-                let _ = shutdown_rx.await;
-            })
-            .await
-            .ok();
+    let task = tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, router).await {
+            eprintln!("[mcp] axum serve error: {}", e);
+        }
     });
 
-    Ok(McpHttpHandle {
-        shutdown: shutdown_tx,
-    })
+    Ok(McpHttpHandle { _task: task })
 }
 
 #[cfg(test)]
@@ -322,14 +316,9 @@ mod tests {
     #[tokio::test]
     async fn test_start_server_binds_and_serves_health() {
         let handle = start_server("127.0.0.1:0", make_state()).await;
-        // 127.0.0.1:0 让 OS 分配端口,但 axum listener 不暴露端口给我们
-        // 所以这里只验证 start_server 不报错 + 能正常 shutdown
-        // 实际端口绑定在 build_router 的 unit test 里通过 oneshot 验证
         assert!(handle.is_ok(), "start_server should succeed");
-        let handle = handle.unwrap();
-        // 关闭
-        handle.shutdown.send(()).ok();
-        // 给一点时间让 task 退出
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // JoinHandle 不需要显式 shutdown,task 跟随 runtime 生命周期
+        // drop handle 不会停止 server
+        let _handle = handle.unwrap();
     }
 }
