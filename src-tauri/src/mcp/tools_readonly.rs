@@ -47,18 +47,56 @@ impl Tool for ReadMindmapTool {
         })
     }
     fn call(&self, args: Value) -> Result<Value, RpcError> {
-        // Phase 1 只支持读当前打开的文档(path 参数暂未实现,需 Tauri file IO)
-        // Phase 2 加 path 支持
-        if args.get("path").is_some() {
-            return Err(RpcError::mcp_error(
-                "path 参数暂未实现,Phase 1 只能读当前打开的文档",
-                None,
-            ));
+        // 如果传了 path,从磁盘读任意 .mmap 文件
+        if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+            return self.read_from_path(path);
         }
+        // 否则读当前打开的文档
         let content = self.source.current_content().ok_or_else(|| {
             RpcError::mcp_error("当前没有打开任何思维导图文档", None)
         })?;
         let path = self.source.current_file_path();
+        let node_count = count_nodes(&content.root);
+        Ok(json!({
+            "file_path": path,
+            "version": content.version,
+            "node_count": node_count,
+            "root": content.root,
+            "canvas_state": content.canvas_state,
+        }))
+    }
+}
+
+impl ReadMindmapTool {
+    fn read_from_path(&self, path: &str) -> Result<Value, RpcError> {
+        // .mmap 是目录:含 content.json + meta.json + assets/ + thumbnails/
+        let mmap_root = std::path::PathBuf::from(path);
+        if !mmap_root.exists() {
+            return Err(RpcError::mcp_error(
+                &format!("文件不存在: {}", path),
+                None,
+            ));
+        }
+        if !mmap_root.is_dir() {
+            return Err(RpcError::mcp_error(
+                &format!("路径不是 .mmap 目录: {}", path),
+                None,
+            ));
+        }
+        let content_path = mmap_root.join("content.json");
+        let content_str = std::fs::read_to_string(&content_path).map_err(|e| {
+            RpcError::internal_error(Some(json!({
+                "error": format!("{}", e),
+                "hint": "无法读取 content.json(文件可能损坏)"
+            })))
+        })?;
+        let content: crate::models::Content = serde_json::from_str(&content_str)
+            .map_err(|e| {
+                RpcError::mcp_error(
+                    "解析 content.json 失败",
+                    Some(json!({"error": format!("{}", e)})),
+                )
+            })?;
         let node_count = count_nodes(&content.root);
         Ok(json!({
             "file_path": path,
@@ -449,10 +487,55 @@ mod tests {
     }
 
     #[test]
-    fn test_read_mindmap_path_param_not_implemented() {
+    fn test_read_mindmap_path_param_reads_from_disk() {
         let tool = ReadMindmapTool::new(make_arc_source());
-        let err = tool.call(json!({"path": "/other.mmap"})).unwrap_err();
+        // 用 tmp 目录构造一个假 .mmap
+        let tmp = std::env::temp_dir().join(format!(
+            "mcp-test-{}-{}.mmap",
+            std::process::id(),
+            chrono::Utc::now().timestamp_millis()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let content = make_test_content();
+        std::fs::write(
+            tmp.join("content.json"),
+            serde_json::to_string_pretty(&content).unwrap(),
+        )
+        .unwrap();
+        let result = tool.call(json!({"path": tmp.to_string_lossy()})).unwrap();
+        assert_eq!(result["file_path"].as_str().unwrap(), tmp.to_string_lossy().as_ref());
+        assert_eq!(result["node_count"], 4);
+        assert_eq!(result["root"]["topic"], "My Mind Map");
+        // 清理
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn test_read_mindmap_path_not_exist() {
+        let tool = ReadMindmapTool::new(make_arc_source());
+        let err = tool
+            .call(json!({"path": "/definitely/not/exist.mmap"}))
+            .unwrap_err();
         assert_eq!(err.code, -32000);
+        assert!(err.message.contains("不存在"));
+    }
+
+    #[test]
+    fn test_read_mindmap_path_not_directory() {
+        let tool = ReadMindmapTool::new(make_arc_source());
+        // 传一个文件路径而非目录
+        let tmp_file = std::env::temp_dir().join(format!(
+            "mcp-test-file-{}-{}.txt",
+            std::process::id(),
+            chrono::Utc::now().timestamp_millis()
+        ));
+        std::fs::write(&tmp_file, "not a mmap").unwrap();
+        let err = tool
+            .call(json!({"path": tmp_file.to_string_lossy()}))
+            .unwrap_err();
+        assert_eq!(err.code, -32000);
+        assert!(err.message.contains("不是 .mmap 目录"));
+        std::fs::remove_file(&tmp_file).ok();
     }
 
     // --- F-P1-07 search_nodes ---
