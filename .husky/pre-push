@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 # pre-push:重量检查,跑全量测试 + 覆盖率门槛
-# 只在 feature/mcp-server 分支强制(其他分支可宽松)
+
+# 确保 cargo 在 PATH(husky 默认不加载 ~/.zshrc)
+export PATH="$HOME/.cargo/bin:$PATH"
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo "[pre-push] branch=$BRANCH"
@@ -11,7 +13,7 @@ npx tsc --noEmit || { echo "✗ TypeScript check failed"; exit 1; }
 # 前端测试
 npx vitest run || { echo "✗ FE tests failed"; exit 1; }
 
-# Rust 测试(需 cargo 在 PATH)
+# Rust 测试
 if command -v cargo >/dev/null 2>&1; then
   (cd src-tauri && cargo test --lib) || { echo "✗ Rust tests failed"; exit 1; }
 else
