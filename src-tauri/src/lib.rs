@@ -220,9 +220,15 @@ pub fn run() {
                     server: std::sync::Arc::new(server),
                 };
                 let addr = format!("127.0.0.1:{}", mcp_prefs.port);
+                let app_handle_clone = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     match crate::mcp::start_server(&addr, app_state).await {
-                        Ok(_) => println!("[mcp] server listening on http://{}", addr),
+                        Ok(handle) => {
+                            // ★ 关键:把 handle 存到 Tauri state,防止被 drop
+                            // drop McpHttpHandle 会 abort 内部 task,导致 server 立刻关闭
+                            app_handle_clone.manage(handle);
+                            println!("[mcp] server listening on http://{}", addr);
+                        }
                         Err(e) => eprintln!("[mcp] server start failed: {}", e),
                     }
                 });
