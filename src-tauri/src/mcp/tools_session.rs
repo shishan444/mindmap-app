@@ -257,7 +257,7 @@ mod tests {
         let result = tool.call(json!({"client_name": "Claude"})).unwrap();
         assert!(result["session_id"].as_str().unwrap().len() > 0);
         assert!(result["expires_at_ms"].as_u64().unwrap() > 0);
-        assert_eq!(result["ttl_ms"], (DEFAULT_TTL_MS as u64));
+        assert_eq!(result["ttl_ms"], (crate::mcp::editor_mode::DEFAULT_TTL_MS as u64));
     }
 
     #[test]
