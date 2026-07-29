@@ -385,6 +385,13 @@ pub fn ping() -> String {
     "pong".to_string()
 }
 
+/// 诊断用:前端通过 invoke 把信息打到 Rust stdout(便于调试 event 链路)
+#[tauri::command]
+pub fn __echo(msg: String) -> String {
+    println!("[echo] {}", msg);
+    msg
+}
+
 // ===== MCP 状态推送(Phase 1 只读 MVP)=====
 
 /// 前端推送状态到后端 MCP 镜像

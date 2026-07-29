@@ -34,9 +34,15 @@ export default function LlmSessionBanner() {
 
   const handleTakeOver = async () => {
     try {
+      console.log("[banner] 点接管按钮,调 llm_force_release");
       setError(null);
-      await invoke("llm_force_release");
+      const result = await invoke("llm_force_release");
+      console.log("[banner] llm_force_release 返回:", result);
+      // 双保险:即使后端 emit 失败,前端也主动清空 llmSession
+      console.log("[banner] 主动清空 store.llmSession(双保险)");
+      useMindMapStore.getState().setLlmSession(null);
     } catch (e) {
+      console.error("[banner] 接管失败:", e);
       setError("接管失败: " + e);
     }
   };

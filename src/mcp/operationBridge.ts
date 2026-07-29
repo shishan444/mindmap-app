@@ -16,6 +16,7 @@
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
 
 // 模块级状态:记录 LLM 会话是否在 zundo pause 中
@@ -51,15 +52,48 @@ export interface SessionChange {
  * 注意:这是 async 函数(attach_file 需要调 Tauri command)
  */
 export async function applyOperation(mind: any, op: LlmOperation): Promise<void> {
+  // ★ 诊断 echo 到 Rust stdout
+  try {
+    await invoke("__echo", { msg: `[applyOp] start ${op.op_type}` });
+  } catch {}
+  console.log("[applyOperation] start:", op.op_type, "payload:", op.payload);
   switch (op.op_type) {
     case "create_node": {
-      const { parent_id, topic, priority, icons } = op.payload;
-      const parent = mind.findEle?.(parent_id);
+      let { parent_id, topic, priority, icons } = op.payload;
+      // ★ 约定转换:LLM 用 "root" 指代文档根节点,实际 root id 是 UUID
+      // 这里从 store 拿真实 root id 替换
+      if (parent_id === "root") {
+        const realRootId = useMindMapStore.getState().content?.root?.id;
+        if (realRootId) {
+          try { await invoke("__echo", { msg: `[applyOp] parent_id "root" → 真实 ${realRootId.slice(0, 8)}` }); } catch {}
+          parent_id = realRootId;
+        }
+      }
+      try { await invoke("__echo", { msg: `[applyOp] findEle parent=${parent_id}` }); } catch {}
+      let parent: any = null;
+      try {
+        parent = mind.findEle?.(parent_id);
+      } catch (e) {
+        try { await invoke("__echo", { msg: `[applyOp] ✗ findEle threw: ${String(e).slice(0, 80)}` }); } catch {}
+        throw e;
+      }
+      try { await invoke("__echo", { msg: `[applyOp] parent found=${!!parent} id=${parent?.nodeObj?.id ?? "?"}` }); } catch {}
       if (!parent) throw new Error(`父节点 ${parent_id} 不存在`);
       const newNodeObj: any = { topic };
       if (priority) newNodeObj.priority = priority;
       if (icons) newNodeObj.icons = icons;
-      mind.addChild(parent, newNodeObj);
+      try { await invoke("__echo", { msg: `[applyOp] addChild topic=${topic}` }); } catch {}
+      try {
+        mind.addChild(parent, newNodeObj);
+        try { await invoke("__echo", { msg: `[applyOp] ✓ addChild 完成` }); } catch {}
+        // 等 syncFromMindElixir 跑完,看 store 是否真更新
+        await new Promise(r => setTimeout(r, 500));
+        const rootChildren = useMindMapStore.getState().content?.root?.children?.length;
+        try { await invoke("__echo", { msg: `[applyOp] store content root.children.length=${rootChildren}` }); } catch {}
+      } catch (e) {
+        try { await invoke("__echo", { msg: `[applyOp] ✗ addChild threw: ${String(e).slice(0, 80)}` }); } catch {}
+        throw e;
+      }
       break;
     }
     case "update_node": {
@@ -148,27 +182,37 @@ export async function initLlmBridge(): Promise<void> {
   if (bridgeStarted) return;
   bridgeStarted = true;
 
-  // 订阅 llm-operation
-  const unlisten1 = await listen<LlmOperation>("llm-operation", (event) => {
-    const op = event.payload;
-    // 记录到操作历史(便于侧栏显示)
-    useMindMapStore.getState().pushLlmOperation?.({
-      ...op,
-      received_at_ms: Date.now(),
-    });
-    const mind = useMindMapStore.getState().mindInstance;
-    if (!mind) {
-      console.warn("[llm-bridge] mind 实例未就绪,丢弃 op:", op.op_id);
-      return;
-    }
-    // async 调用,catch 错误
+  console.log("[llm-bridge] initLlmBridge 启动,注册 listen...");
+
+  try {
+    // 订阅 llm-operation
+    const unlisten1 = await listen<LlmOperation>("llm-operation", (event) => {
+      // ★ 诊断:通过 invoke 反馈到 Rust stdout(因为前端 console 默认不到 stdout)
+      invoke("__echo", { msg: `[frontend] ★★★ 收到 llm-operation ${event.payload?.op_type} ${event.payload?.op_id}` }).catch(() => {});
+      console.log("[llm-bridge] ★★★ 收到 llm-operation ★★★:", event.payload?.op_type, event.payload?.op_id);
+      const op = event.payload;
+      // 记录到操作历史(便于侧栏显示)
+      useMindMapStore.getState().pushLlmOperation?.({
+        ...op,
+        received_at_ms: Date.now(),
+      });
+      const mind = useMindMapStore.getState().mindInstance;
+      console.log("[llm-bridge] mind 实例:", !!mind);
+      if (!mind) {
+        console.warn("[llm-bridge] mind 实例未就绪,丢弃 op:", op.op_id);
+        return;
+      }
+      console.log("[llm-bridge] 调 applyOperation");
+      // async 调用,catch 错误
     applyOperation(mind, op).catch((e) => {
       console.error("[llm-bridge] op 执行失败:", op, e);
     });
   });
+    console.log("[llm-bridge] ✓ llm-operation listen 注册成功");
 
   // 订阅 llm-session-changed
   const unlisten2 = await listen<SessionChange>("llm-session-changed", (event) => {
+    console.log("[llm-bridge] 收到 llm-session-changed:", event.payload?.reason);
     const change = event.payload;
     useMindMapStore.getState().setLlmSession?.(change);
 
@@ -197,8 +241,13 @@ export async function initLlmBridge(): Promise<void> {
       }
     }
   });
+    console.log("[llm-bridge] ✓ llm-session-changed listen 注册成功");
 
   unlisteners.push(unlisten1, unlisten2);
+  } catch (e) {
+    console.error("[llm-bridge] ✗ initLlmBridge 失败:", e);
+  }
+  console.log("[llm-bridge] initLlmBridge 完成");
 }
 
 /**

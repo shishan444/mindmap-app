@@ -241,6 +241,16 @@ pub fn run() {
                 eprintln!("[mindmap] dev_logger init failed: {}", e);
             }
 
+            // === dev 模式自动打开 DevTools ===
+            // Tauri 2 默认 webview 不绑 Cmd+Option+I,需要主动 open_devtools()
+            #[cfg(debug_assertions)]
+            {
+                if let Some(main_win) = app.get_webview_window("main") {
+                    main_win.open_devtools();
+                    println!("[mindmap] dev 模式:已自动打开 DevTools");
+                }
+            }
+
             Ok(())
         })
         .on_window_event(handle_window_event)
@@ -260,6 +270,7 @@ pub fn run() {
             commands::init_app_data,
             commands::path_exists,
             commands::ping,
+            commands::__echo,
             commands::mcp_update_state,
             commands::llm_force_release,
             commands::save_bytes,

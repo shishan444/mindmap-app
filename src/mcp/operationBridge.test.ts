@@ -48,15 +48,15 @@ function makeOp(op_type: string, payload: any): LlmOperation {
 }
 
 describe("FE-MCP-BRIDGE: applyOperation", () => {
-  it("create_node 调 mind.addChild", () => {
+  it("create_node 调 mind.addChild", async () => {
     const mind: any = makeMockMind();
-    applyOperation(mind, makeOp("create_node", { parent_id: "root", topic: "新节点" }));
+    await applyOperation(mind, makeOp("create_node", { parent_id: "root", topic: "新节点" }));
     expect(mind.calls).toContain("addChild:root:新节点");
   });
 
-  it("create_node 带优先级和图标", () => {
+  it("create_node 带优先级和图标", async () => {
     const mind: any = makeMockMind();
-    applyOperation(
+    await applyOperation(
       mind,
       makeOp("create_node", {
         parent_id: "root",
@@ -75,9 +75,9 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     ).rejects.toThrow(/父节点/);
   });
 
-  it("update_node 调 mind.reshapeNode", () => {
+  it("update_node 调 mind.reshapeNode", async () => {
     const mind: any = makeMockMind();
-    applyOperation(
+    await applyOperation(
       mind,
       makeOp("update_node", { node_id: "n1", patch: { topic: "改名" } }),
     );
@@ -92,15 +92,15 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     ).rejects.toThrow(/节点 no/);
   });
 
-  it("delete_node 调 mind.removeNodes", () => {
+  it("delete_node 调 mind.removeNodes", async () => {
     const mind: any = makeMockMind();
-    applyOperation(mind, makeOp("delete_node", { node_id: "n1" }));
+    await applyOperation(mind, makeOp("delete_node", { node_id: "n1" }));
     expect(mind.calls).toContain("removeNodes:n1");
   });
 
-  it("move_node 调 mind.moveNodeIn", () => {
+  it("move_node 调 mind.moveNodeIn", async () => {
     const mind: any = makeMockMind();
-    applyOperation(
+    await applyOperation(
       mind,
       makeOp("move_node", { node_id: "n1", to_parent_id: "n2" }),
     );
@@ -114,10 +114,10 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     ).rejects.toThrow(/目标父节点/);
   });
 
-  it("未知 op_type 不抛错只警告", () => {
+  it("未知 op_type 不抛错只警告", async () => {
     const mind: any = makeMockMind();
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    applyOperation(mind, makeOp("unknown_op" as any, {}));
+    await applyOperation(mind, makeOp("unknown_op" as any, {}));
     expect(warnSpy).toHaveBeenCalled();
     expect(mind.calls.length).toBe(0);
     warnSpy.mockRestore();

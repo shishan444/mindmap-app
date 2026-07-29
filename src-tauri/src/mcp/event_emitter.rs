@@ -137,17 +137,25 @@ impl TauriEmitter {
 impl EventEmitter for TauriEmitter {
     fn emit_llm_operation(&self, op: LlmOperation) -> Result<(), RpcError> {
         use tauri::Emitter;
-        self.app
-            .emit("llm-operation", &op)
-            .map_err(|e| RpcError::internal_error(Some(serde_json::json!(format!("{}", e)))))?;
-        Ok(())
+        println!("[mcp-emit] emit llm-operation op_id={} type={}", op.op_id, op.op_type);
+        match self.app.emit("llm-operation", &op) {
+            Ok(_) => {
+                println!("[mcp-emit] ✓ emit 成功");
+                Ok(())
+            }
+            Err(e) => {
+                println!("[mcp-emit] ✗ emit 失败: {}", e);
+                Err(RpcError::internal_error(Some(serde_json::json!(format!("{}", e)))))
+            }
+        }
     }
     fn emit_session_changed(&self, change: SessionChange) -> Result<(), RpcError> {
         use tauri::Emitter;
-        self.app
-            .emit("llm-session-changed", &change)
-            .map_err(|e| RpcError::internal_error(Some(serde_json::json!(format!("{}", e)))))?;
-        Ok(())
+        println!("[mcp-emit] emit session-changed reason={}", change.reason);
+        match self.app.emit("llm-session-changed", &change) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(RpcError::internal_error(Some(serde_json::json!(format!("{}", e))))),
+        }
     }
 }
 
