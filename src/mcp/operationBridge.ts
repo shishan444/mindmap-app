@@ -79,7 +79,10 @@ export async function applyOperation(mind: any, op: LlmOperation): Promise<void>
       }
       try { await invoke("__echo", { msg: `[applyOp] parent found=${!!parent} id=${parent?.nodeObj?.id ?? "?"}` }); } catch {}
       if (!parent) throw new Error(`父节点 ${parent_id} 不存在`);
-      const newNodeObj: any = { topic };
+      const newNodeObj: any = {
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        topic,
+      };
       if (priority) newNodeObj.priority = priority;
       if (icons) newNodeObj.icons = icons;
       try { await invoke("__echo", { msg: `[applyOp] addChild topic=${topic}` }); } catch {}
@@ -100,7 +103,14 @@ export async function applyOperation(mind: any, op: LlmOperation): Promise<void>
       const { node_id, patch } = op.payload;
       const tpc = mind.findEle?.(node_id);
       if (!tpc) throw new Error(`节点 ${node_id} 不存在`);
-      mind.reshapeNode(tpc, patch);
+      // ★ mind-elixir reshapeNode 有 bug(Object.assign 到 tpc 不是 nodeObj)
+      // 直接改 nodeObj + 手动同步 DOM + fire operation
+      Object.assign(tpc.nodeObj, patch);
+      if (patch.topic !== undefined && tpc.text) {
+        tpc.text.textContent = patch.topic;
+      }
+      mind.bus?.fire?.("operation", { name: "reshapeNode", obj: tpc.nodeObj });
+      try { await invoke("__echo", { msg: `[applyOp] ✓ update_node id=${node_id?.slice(0,8)}` }); } catch {}
       break;
     }
     case "delete_node": {

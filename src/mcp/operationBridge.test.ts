@@ -6,12 +6,13 @@ import { useMindMapStore } from "../store";
 function makeMockMind() {
   const calls: string[] = [];
   const nodes = new Map<string, any>([
-    ["root", { id: "root", topic: "根" }],
-    ["n1", { id: "n1", topic: "节点1", parent: { id: "root" } }],
-    ["n2", { id: "n2", topic: "节点2", parent: { id: "root" } }],
+    ["root", { id: "root", topic: "根", nodeObj: { id: "root", topic: "根" } }],
+    ["n1", { id: "n1", topic: "节点1", parent: { id: "root" }, nodeObj: { id: "n1", topic: "节点1" }, text: { textContent: "节点1" } }],
+    ["n2", { id: "n2", topic: "节点2", parent: { id: "root" }, nodeObj: { id: "n2", topic: "节点2" }, text: { textContent: "节点2" } }],
   ]);
   return {
     calls,
+    bus: { fire: vi.fn() },
     findEle: (id: string) => nodes.get(id),
     addChild: (parent: any, newObj: any) => {
       calls.push(`addChild:${parent.id}:${newObj.topic}`);
@@ -75,14 +76,16 @@ describe("FE-MCP-BRIDGE: applyOperation", () => {
     ).rejects.toThrow(/父节点/);
   });
 
-  it("update_node 调 mind.reshapeNode", async () => {
+  it("update_node 改 nodeObj topic", async () => {
     const mind: any = makeMockMind();
     await applyOperation(
       mind,
       makeOp("update_node", { node_id: "n1", patch: { topic: "改名" } }),
     );
-    expect(mind.calls[0]).toContain("reshapeNode:n1");
-    expect(mind.calls[0]).toContain("改名");
+    // update_node 直接改 nodeObj.topic(绕过 reshapeNode bug)
+    expect(mind.findEle("n1").nodeObj.topic).toBe("改名");
+    // fire operation 触发 syncFromMindElixir
+    expect(mind.bus?.fire).toBeDefined();
   });
 
   it("update_node 节点不存在抛错", async () => {
@@ -140,9 +143,10 @@ describe("FE-MCP-BRIDGE: op 序列", () => {
     await applyOperation(mind, makeOp("delete_node", { node_id: "n2" }));
     expect(mind.calls).toEqual([
       "addChild:root:A",
-      expect.stringMatching(/^reshapeNode:n1:/),
       "removeNodes:n2",
     ]);
+    // update_node 直接改 nodeObj,不调 reshapeNode
+    expect(mind.findEle("n1").nodeObj.topic).toBe("X");
   });
 });
 

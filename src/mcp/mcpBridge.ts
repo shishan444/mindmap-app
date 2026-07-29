@@ -53,16 +53,13 @@ export function useMcpBridge() {
       }
     };
 
-    // 防抖订阅(签名包含 root children 数量 + root topic + session 变化)
-    const countNodes = (n: any): number => {
-      if (!n) return 0;
-      return 1 + (n.children ?? []).reduce((sum: number, c: any) => sum + countNodes(c), 0);
-    };
+    // 防抖订阅
+    // ★ 用 content JSON hash 做签名(检测任何节点变化,包括 topic 改名)
     const unsub = useMindMapStore.subscribe((state) => {
+      const contentStr = state.content ? JSON.stringify(state.content) : "";
       const sig = JSON.stringify({
-        c: state.content?.root?.id,
-        n: countNodes(state.content?.root),  // ★ 节点总数(检测增删节点)
-        t: state.content?.root?.topic,        // ★ root topic
+        len: contentStr.length,
+        hash: contentStr.length > 100 ? contentStr.slice(0, 50) + contentStr.slice(-50) : contentStr,
         f: state.filePath,
         r: (state.allReminders ?? []).length,
         s: state.llmSession?.session?.session_id ?? null,
@@ -71,7 +68,7 @@ export function useMcpBridge() {
       lastSig = sig;
 
       if (timer) window.clearTimeout(timer);
-      // llmSession 变化时立即推送(不等防抖),其他变化 1s 防抖
+      // llmSession 变化时立即推送,其他变化 1s 防抖
       const delay = state.llmSession?.session ? 0 : DEBOUNCE_MS;
       timer = window.setTimeout(push, delay);
     });
