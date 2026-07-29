@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "pretauri": "bash scripts/precheck.sh",
     "tauri": "tauri",
+    "tauri:build": "tauri build && bash scripts/sign-app.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

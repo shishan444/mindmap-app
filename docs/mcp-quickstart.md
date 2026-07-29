@@ -112,3 +112,53 @@ McpStateMirror(前端推送的状态镜像)
 ## 8. 反馈
 
 发现问题或想加新 tool,在 GitHub Issues 提:[shishan444/mindmap-app/issues](https://github.com/shishan444/mindmap-app/issues)
+
+---
+
+## 9. 故障排查:App 提示"已损坏,无法打开"
+
+### 真正根因(不是 quarantine!)
+
+| 表面 | 真因 |
+|------|------|
+| Chrome 加 `com.apple.quarantine` | **签名损坏**:`codesign --verify` 失败,linker-signed 跟 Resources 不一致 |
+| Gatekeeper 拦截 | **LaunchServices 数据库混乱**:旧版本注册 + 废纸篓残留 |
+| macOS 26 (Tahoe) 报损坏 | 新策略:签名轻微不一致就拒绝(之前能宽容通过) |
+
+### 修复(3 步,按顺序)
+
+```bash
+# 1. 重新 ad-hoc 签名(覆盖损坏的 linker-signed)
+codesign --force --deep --sign - /Applications/mindmap-app.app
+
+# 2. 验证签名(应该 exit 0)
+codesign --verify --deep --strict /Applications/mindmap-app.app
+
+# 3. 清 LaunchServices 数据库 + 废纸篓旧版
+rm -rf ~/.Trash/mindmap-app*.app
+/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
+  -f /Applications/mindmap-app.app
+```
+
+### 验证
+
+```bash
+open /Applications/mindmap-app.app
+sleep 3
+curl http://127.0.0.1:23456/health  # 应返回 ok
+```
+
+### 还是不行?
+
+```bash
+# 查 macOS unified log 看真实拒绝原因
+log show --predicate 'process == "mindmap-app" OR senderImagePath CONTAINS "mindmap-app"' \
+  --info --last 1m | grep -iE "deny|reject|fail" | head -10
+
+# 极端方案:暂时禁用 Gatekeeper(不推荐长期)
+sudo spctl --master-disable
+```
+
+### 永久避免(开发者侧)
+
+本项目 build 流程已加自动重签(`scripts/sign-app.sh`),开发者跑 `npm run tauri:build` 出来的 .app 不会再有这个问题。普通用户从 Release 下 .dmg 安装仍需手动跑一次上面的修复步骤(因为 Apple Developer 签名 + 公证需要 $99/年,目前未做)。
