@@ -25,7 +25,16 @@ function syncHourglassesExternal(inst: any, state: any) {
   const reminders = state.allReminders || [];
   const now = new Date();
   const walk = (node: any) => {
-    const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    if (!node?.id) return;
+    // findEle 可能 throw("Node not found, maybe collapsed") — 用 try/catch
+    // 节点 collapsed / 还没 init 完 / 用户在编辑中,都可能找不到 DOM
+    let tpc: any = null;
+    try {
+      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    } catch (e) {
+      // 节点暂时找不到,跳过(下次 content 变化会重试)
+      return;
+    }
     if (!tpc) return;
     // 移除旧沙漏
     const old = tpc.parentElement?.querySelector(".hourglass-wrapper");
@@ -109,7 +118,13 @@ function syncAttachedFiles(inst: any, state: any) {
   if (!inst || !state.content) return;
   const mmapPath = state.filePath;
   const walk = (node: any) => {
-    const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    if (!node?.id) return;
+    let tpc: any = null;
+    try {
+      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    } catch {
+      return;
+    }
     if (!tpc) return;
     // 移除旧附件渲染
     const oldRender = tpc.querySelector(".attached-render");
@@ -359,7 +374,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const state = useMindMapStore.getState();
       if (!inst || !state.content) return;
       const walk = (node: any) => {
-        const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        if (!node?.id) return;
+        let tpc: any = null;
+        try {
+          tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        } catch {
+          return;
+        }
         if (tpc) {
           tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
           if (node.priority) {
@@ -1091,7 +1112,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const state = useMindMapStore.getState();
       if (!inst || !state.content) return;
       const walk = (node: any) => {
-        const tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        if (!node?.id) return;
+        let tpc: any = null;
+        try {
+          tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+        } catch {
+          return;
+        }
         if (tpc) {
           tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
           if (node.priority) {
