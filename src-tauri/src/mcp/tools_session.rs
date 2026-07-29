@@ -2,7 +2,7 @@
 //!
 //! 配合 EditorMode + SessionRegistry + EventEmitter 工作。
 
-use crate::mcp::editor_mode::{EditorMode, DEFAULT_TTL_MS};
+use crate::mcp::editor_mode::EditorMode;
 use crate::mcp::event_emitter::{EventEmitter, SessionChange};
 use crate::mcp::protocol::{RpcError, Tool};
 use crate::mcp::session::SessionRegistry;
