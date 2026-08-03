@@ -63,10 +63,12 @@ describe("FE-TOOLBAR", () => {
     expect(onNew).toHaveBeenCalledTimes(1);
   });
 
-  it("FE-TOOLBAR: 点击打开按钮触发 onOpen", () => {
+  it("FE-TOOLBAR: 点击打开按钮触发 onOpen", async () => {
     const onOpen = vi.fn();
     renderToolbar({ onOpen });
-    fireEvent.click(screen.getByTitle("打开"));
+    const openBtn = screen.getByTitle("打开文件").querySelector("button") || screen.getByTitle("打开文件");
+    fireEvent.click(openBtn);
+    await new Promise(r => setTimeout(r, 50));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 

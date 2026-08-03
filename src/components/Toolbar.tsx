@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { useMindMapStore } from "../store";
 import type { Priority } from "../types";
 import { PRIORITY_LABELS } from "../types";
 import { logUserAction } from "../utils/devLogger";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import "./Toolbar.css";
 
 interface Props {
@@ -24,6 +26,61 @@ interface Props {
   searchCurrentIndex: number;
 }
 
+function OpenDropdown() {
+  const [recentFiles, setRecentFiles] = useState<Array<{ path: string; name: string; pinned?: boolean }>>([]);
+  const dirty = useMindMapStore((s) => s.dirty);
+
+  useEffect(() => {
+    invoke<{ files: Array<{ path: string; name: string; pinned?: boolean }> }>("get_recent_files")
+      .then((r) => setRecentFiles(r.files?.slice(0, 5) ?? []))
+      .catch(() => {});
+  }, []);
+
+  const checkDirty = (): boolean => {
+    if (dirty && !confirm("当前文档有未保存的修改,是否继续打开?")) return false;
+    return true;
+  };
+
+  const openRecent = async (path: string, name: string) => {
+    if (!checkDirty()) return;
+    try {
+      const windows = await invoke<Array<{ label: string; title: string }>>("list_windows");
+      const existing = windows.find((w) => w.title.includes(name));
+      if (existing) {
+        await invoke("focus_window", { label: existing.label });
+        return;
+      }
+      await invoke("add_recent_file", { path, name });
+      await invoke("set_last_opened_file", { path });
+      await invoke("create_new_window", { mode: "open", mmapPath: path });
+    } catch (e) {
+      console.error("[Toolbar] 打开最近文件失败", e);
+      alert("打开失败: " + e);
+    }
+  };
+
+  if (recentFiles.length === 0) return null;
+
+  return (
+    <div className="dropdown-menu">
+      <div className="dropdown-divider" />
+      <div style={{ padding: "4px 12px", fontSize: 11, color: "#999" }}>🕐 最近文件</div>
+      {recentFiles.map((f) => (
+        <button
+          key={f.path}
+          className="dropdown-item"
+          onClick={() => {
+            logUserAction("toolbar.openRecent", { path: f.path });
+            openRecent(f.path, f.name);
+          }}
+          title={f.path}
+        >
+          📄 {f.name}
+        </button>
+      ))}
+    </div>
+  );
+}
 export default function Toolbar({
   onNew,
   onOpen,
@@ -70,16 +127,18 @@ export default function Toolbar({
         >
           📝
         </button>
-        <button
-          className="tb-btn"
-          onClick={() => {
-            logUserAction("toolbar.click", { target: "open" });
-            onOpen();
-          }}
-          title="打开"
-        >
-          📂
-        </button>
+        <div className="priority-dropdown" title="打开文件">
+          <button
+            className="tb-btn"
+            onClick={() => {
+              logUserAction("toolbar.click", { target: "open" });
+              onOpen();
+            }}
+          >
+            📂
+          </button>
+          <OpenDropdown />
+        </div>
         <button
           className="tb-btn"
           onClick={() => {

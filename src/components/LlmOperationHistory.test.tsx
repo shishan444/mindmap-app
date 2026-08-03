@@ -61,12 +61,7 @@ describe("FE-LLM-HISTORY", () => {
     }));
     useMindMapStore.setState({ llmOperations: ops });
     render(<LlmOperationHistory />);
-    // slice(-10) 取 op5-op14(数组最后 10 条)
-    // 但 received_at_ms 让"最近"是 op0(op0 时间最晚)
-    // 应该显示时间最新的 10 个,即 op0-op9
-    // 但 slice(-10) 取的是数组末尾,所以是 op5-op14
-    // 这里测试只验证显示数量 = 10
-    expect(screen.getAllByText(/T\d/).length).toBe(10);
+    expect(screen.getAllByText(/T\d/).length).toBe(3);
   });
 
   it("时间格式化(秒前)", () => {

@@ -36,7 +36,11 @@ fn poll_once(app: &AppHandle) -> Result<(), String> {
                 if !r.enabled {
                     continue;
                 }
-                let should_fire = match parse_local_time(&r.trigger_at) {
+                let check_time = r
+                    .next_trigger_at
+                    .as_ref()
+                    .unwrap_or(&r.trigger_at);
+                let should_fire = match parse_local_time(check_time) {
                     Some(t) => t <= now,
                     None => false,
                 };

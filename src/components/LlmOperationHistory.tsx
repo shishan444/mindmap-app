@@ -1,10 +1,4 @@
-/**
- * LLM Operation History 侧栏
- *
- * 显示最近 10 个 LLM 操作,让用户看到 AI 做了什么。
- * 数据从 store.llmOperations 取(operationBridge 维护)
- */
-
+import { useState } from "react";
 import { useMindMapStore } from "../store";
 import "./LlmOperationHistory.css";
 
@@ -24,22 +18,39 @@ const OP_ICONS: Record<string, string> = {
   attach_file: "📎",
 };
 
+const COLLAPSED_COUNT = 3;
+const PAGE_SIZE = 10;
+
 export default function LlmOperationHistory() {
   const ops = useMindMapStore((s) => s.llmOperations ?? []);
   const collapsed = useMindMapStore((s) => s.sidebarCollapsed);
+  const [visible, setVisible] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(0);
 
-  if (collapsed || ops.length === 0) return null;
+  if (collapsed || ops.length === 0 || !visible) return null;
 
-  const recent = ops.slice(-10).reverse();
+  const recent = ops.slice().reverse();
+  const display = expanded
+    ? recent.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+    : recent.slice(0, COLLAPSED_COUNT);
+  const totalPages = expanded ? Math.ceil(recent.length / PAGE_SIZE) : 1;
 
   return (
     <div className="llm-history-panel" role="log" aria-label="LLM 操作历史">
       <div className="llm-history-header">
         <span className="llm-history-title">🤖 LLM 操作</span>
         <span className="llm-history-count">{ops.length}</span>
+        <button
+          className="llm-history-close"
+          onClick={() => setVisible(false)}
+          title="关闭操作历史"
+        >
+          ✕
+        </button>
       </div>
       <ul className="llm-history-list">
-        {recent.map((op: any) => (
+        {display.map((op: any) => (
           <li key={op.op_id} className="llm-history-item">
             <span className="llm-history-icon">{OP_ICONS[op.op_type] ?? "•"}</span>
             <span className="llm-history-label">{OP_LABELS[op.op_type] ?? op.op_type}</span>
@@ -48,6 +59,43 @@ export default function LlmOperationHistory() {
           </li>
         ))}
       </ul>
+      <div className="llm-history-footer">
+        {!expanded && ops.length > COLLAPSED_COUNT && (
+          <button
+            className="llm-history-more"
+            onClick={() => setExpanded(true)}
+          >
+            全部({ops.length}) ▾
+          </button>
+        )}
+        {expanded && (
+          <>
+            <button
+              className="llm-history-more"
+              onClick={() => setExpanded(false)}
+            >
+              收起 ▴
+            </button>
+            {totalPages > 1 && (
+              <span className="llm-history-pager">
+                <button
+                  onClick={() => setPage(Math.max(0, page - 1))}
+                  disabled={page === 0}
+                >
+                  ‹
+                </button>
+                <span>{page + 1}/{totalPages}</span>
+                <button
+                  onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+                  disabled={page >= totalPages - 1}
+                >
+                  ›
+                </button>
+              </span>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -71,8 +119,7 @@ function describeOp(op: any): string {
 
 function formatTime(ms?: number): string {
   if (!ms) return "";
-  const now = Date.now();
-  const diff = Math.floor((now - ms) / 1000);
+  const diff = Math.floor((Date.now() - ms) / 1000);
   if (diff < 60) return `${diff}s 前`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m 前`;
   return `${Math.floor(diff / 3600)}h 前`;

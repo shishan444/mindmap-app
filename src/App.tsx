@@ -254,7 +254,9 @@ function App() {
 
   // 多窗口模式:点"打开"在**新窗口**打开文件(当前窗口不动)
   const handleOpen = async () => {
-    const cfg = useMindMapStore.getState().config;
+    const state0 = useMindMapStore.getState();
+    if (state0.dirty && !confirm("当前文档有未保存的修改,是否继续打开?")) return;
+    const cfg = state0.config;
     const selected = await openDialog({
       defaultPath: cfg?.last_open_dir ?? undefined,
       filters: [{ name: "思维导图", extensions: ["mmap"] }],

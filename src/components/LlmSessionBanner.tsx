@@ -9,7 +9,7 @@
  * 当 editor = human 时不显示
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
 import "./LlmSessionBanner.css";
@@ -18,28 +18,32 @@ export default function LlmSessionBanner() {
   const llmSession = useMindMapStore((s) => s.llmSession);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
+  const [fadingOut, setFadingOut] = useState(false);
+  const hadSession = useRef(false);
 
-  // 1s tick 用于倒计时
   useEffect(() => {
-    if (!llmSession?.session) return;
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [llmSession?.session]);
+    if (llmSession?.session) {
+      hadSession.current = true;
+      setFadingOut(false);
+      const t = window.setInterval(() => setNow(Date.now()), 1000);
+      return () => window.clearInterval(t);
+    } else if (hadSession.current && !fadingOut) {
+      setFadingOut(true);
+      const t = window.setTimeout(() => setFadingOut(false), 800);
+      return () => window.clearTimeout(t);
+    }
+  }, [llmSession?.session, fadingOut]);
 
-  if (!llmSession?.session) return null;
+  if (!llmSession?.session && !fadingOut) return null;
 
-  const session = llmSession.session;
-  const remainingMs = Math.max(0, session.expires_at_ms - now);
+  const session = llmSession?.session;
+  const remainingMs = session ? Math.max(0, session.expires_at_ms - now) : 0;
   const remainingSec = Math.floor(remainingMs / 1000);
 
   const handleTakeOver = async () => {
     try {
-      console.log("[banner] 点接管按钮,调 llm_force_release");
       setError(null);
-      const result = await invoke("llm_force_release");
-      console.log("[banner] llm_force_release 返回:", result);
-      // 双保险:即使后端 emit 失败,前端也主动清空 llmSession
-      console.log("[banner] 主动清空 store.llmSession(双保险)");
+      await invoke("llm_force_release");
       useMindMapStore.getState().setLlmSession(null);
     } catch (e) {
       console.error("[banner] 接管失败:", e);
@@ -47,21 +51,36 @@ export default function LlmSessionBanner() {
     }
   };
 
+  const handleClose = () => {
+    useMindMapStore.getState().setLlmSession(null);
+  };
+
   const isUrgent = remainingSec <= 10;
 
   return (
     <div
-      className={`llm-banner ${isUrgent ? "llm-banner-urgent" : ""}`}
+      className={`llm-banner ${isUrgent ? "llm-banner-urgent" : ""} ${!session ? "llm-banner-fading" : ""}`}
       role="status"
       aria-live="polite"
     >
       <span className="llm-banner-icon">🤖</span>
       <span className="llm-banner-text">
-        <strong>{session.client_name}</strong> 正在编辑
-        {remainingSec > 0 ? `(剩余 ${remainingSec}s)` : "(已超时,正在释放)`"}
+        {session ? (
+          <>
+            <strong>{session.client_name}</strong> 正在编辑
+            {remainingSec > 0 ? `(剩余 ${remainingSec}s)` : "(已超时,正在释放)"}
+          </>
+        ) : (
+          "会话已结束"
+        )}
       </span>
-      <button className="llm-banner-takeover" onClick={handleTakeOver} title="中断 LLM,立即恢复编辑">
-        ✋ 接管
+      {session && (
+        <button className="llm-banner-takeover" onClick={handleTakeOver} title="中断 LLM,立即恢复编辑">
+          ✋ 接管
+        </button>
+      )}
+      <button className="llm-banner-close" onClick={handleClose} title="关闭提示">
+        ✕
       </button>
       {error && <span className="llm-banner-error">{error}</span>}
     </div>
