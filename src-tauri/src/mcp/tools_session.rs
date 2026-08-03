@@ -218,9 +218,9 @@ impl Tool for ReleaseSessionTool {
         // Registry 移除
         let info = self.ctx.registry.remove(session_id);
 
-        // 通知前端
+        // 通知前端:session=None 表示"无 session"(让前端清 banner + 解锁画布)
         let _ = self.ctx.emitter.emit_session_changed(SessionChange {
-            session: info,
+            session: None,
             reason: "released".to_string(),
         });
 

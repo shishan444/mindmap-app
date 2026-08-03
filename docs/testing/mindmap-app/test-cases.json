@@ -1,0 +1,3743 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "title": "mindmap-app 全功能测试用例重构",
+    "version": "2026-07-29",
+    "source_ids": [
+      "REQ-MINDMAP-FULL"
+    ],
+    "readiness": "ready",
+    "known_facts": [
+      {
+        "fact_id": "F-001",
+        "statement": "思维导图核心:Tab 加子 / Enter 加兄 / F2 编辑 / Delete 删除 / 拖拽 / Cmd+. 折叠",
+        "source_ids": [
+          "src/components/MindMapCanvas.tsx"
+        ]
+      },
+      {
+        "fact_id": "F-002",
+        "statement": "优先级 P0-P3 通过 me-tpc.priority-pN class + ::before 图标",
+        "source_ids": [
+          "src/components/MindMapCanvas.css"
+        ]
+      },
+      {
+        "fact_id": "F-003",
+        "statement": "提醒系统:创建/编辑/删除,30s 后台轮询,沙漏图标",
+        "source_ids": [
+          "src-tauri/src/reminder_scheduler.rs"
+        ]
+      },
+      {
+        "fact_id": "F-004",
+        "statement": "附件 8 类型,类型色边框 + 扩展名角标",
+        "source_ids": [
+          "src-tauri/src/models.rs"
+        ]
+      },
+      {
+        "fact_id": "F-005",
+        "statement": "导入导出:Markdown/OPML/PNG/SVG/Freemind",
+        "source_ids": [
+          "src-tauri/src/markdown.rs",
+          "src-tauri/src/opml.rs"
+        ]
+      },
+      {
+        "fact_id": "F-006",
+        "statement": "多窗口:每文档独立窗口,子窗口 destroy,主窗口 hide 到托盘",
+        "source_ids": [
+          "src-tauri/src/lib.rs"
+        ]
+      },
+      {
+        "fact_id": "F-007",
+        "statement": "MCP 14 个 tool + EditorMode Mutex + TTL 60s + 接管按钮",
+        "source_ids": [
+          "docs/mcp-architecture.md"
+        ]
+      },
+      {
+        "fact_id": "F-008",
+        "statement": "自动保存 2s 防抖,markSaved 用引用比较",
+        "source_ids": [
+          "src/hooks/useAutoSave.ts"
+        ]
+      },
+      {
+        "fact_id": "F-009",
+        "statement": "mind-elixir reshapeNode 有 bug(Object.assign 到 DOM 不是 nodeObj),前端已绕过",
+        "source_ids": [
+          "src/mcp/operationBridge.ts"
+        ]
+      },
+      {
+        "fact_id": "F-010",
+        "statement": "mind-elixir findEle 在节点 collapsed 时 throw,所有调用需 try/catch",
+        "source_ids": [
+          "src/components/MindMapCanvas.tsx"
+        ]
+      },
+      {
+        "fact_id": "F-011",
+        "statement": "mind-elixir addChild 传对象时不调 generateNewObj,必须手动生成 id",
+        "source_ids": [
+          "src/mcp/operationBridge.ts"
+        ]
+      },
+      {
+        "fact_id": "F-012",
+        "statement": "McpBridge 必须用 content JSON hash 做 sig(子节点 topic 变化要触发推送)",
+        "source_ids": [
+          "src/mcp/mcpBridge.ts"
+        ]
+      }
+    ],
+    "assumptions": [
+      {
+        "assumption_id": "A-001",
+        "statement": "Tauri 2 macOS 26 WKWebView 行为跟 Chrome 一致",
+        "confidence": "medium"
+      },
+      {
+        "assumption_id": "A-002",
+        "statement": "mind-elixir 5.14 是稳定依赖",
+        "confidence": "high"
+      }
+    ],
+    "critical_unknowns": [
+      {
+        "unknown_id": "U-001",
+        "statement": "reshapeNode bug 是否影响 priority/icons/style 等非 topic 字段"
+      },
+      {
+        "unknown_id": "U-002",
+        "statement": "MCP TTL task 在 app 关闭时是否泄漏"
+      },
+      {
+        "unknown_id": "U-003",
+        "statement": "多窗口同时打开同一 .mmap 文件时 save_mmap 是否互相覆盖"
+      }
+    ]
+  },
+  "design_gate": {
+    "status": "approved",
+    "approval_required_before_implementation": true,
+    "blocking_reasons": [],
+    "approved_by": "user-via-goal"
+  },
+  "strategy": {
+    "protected_values": [
+      "PV-001 用户思维导图数据不丢失",
+      "PV-002 LLM 与人不能同时编辑",
+      "PV-003 MCP 写操作真实生效(不只 emit)",
+      "PV-004 自动保存的修改能被重开看到",
+      "PV-005 接管按钮真能中断 LLM",
+      "PV-006 附件 attached_file 在 Tab 加子节点时不丢",
+      "PV-007 MCP 协议合规(JSON-RPC 2.0)",
+      "PV-008 多窗口子窗口关闭不卡 CloseRequested 死循环"
+    ],
+    "scope_in": [
+      "L1 单元:工具函数、Rust 命令、协议层、adapter、EditorMode 状态机",
+      "L2 业务流程:MCP CRUD、自动保存 race、附件持久化、多窗口生命周期",
+      "L3 真实操作:LLM 接管、Tab 加子、附件附加、偏好设置"
+    ],
+    "scope_out": [
+      "跨设备 LLM 接入(只本机 loopback)",
+      "多 LLM 客户端并发",
+      "Homebrew 分发 / Apple 公证",
+      "性能/压力测试(节点数 > 1000)",
+      "国际化 i18n"
+    ],
+    "layers": {
+      "L1": {
+        "disposition": "cases",
+        "rationale": "规则、状态机、协议、adapter 等局部不变量在单元层产生"
+      },
+      "L2": {
+        "disposition": "cases",
+        "rationale": "MCP CRUD 真实链路、自动保存 race、save_mmap 原子写需要端到端验证"
+      },
+      "L3": {
+        "disposition": "cases",
+        "rationale": "接管按钮、附件 UI、画布锁定需要真实界面观察"
+      }
+    },
+    "categories": {
+      "positive": {
+        "disposition": "cases",
+        "rationale": "合法条件形成目标状态"
+      },
+      "negative": {
+        "disposition": "cases",
+        "rationale": "守卫拒绝非法状态转换(无 session、缺参数、重复 acquire)"
+      },
+      "risk": {
+        "disposition": "cases",
+        "rationale": "并发 acquire / TTL race / mirror 不更新 / reshapeNode bug / findEle throw"
+      }
+    },
+    "run_profiles": [
+      "local",
+      "pr",
+      "scheduled",
+      "release",
+      "post_deploy",
+      "exploration"
+    ]
+  },
+  "flow_models": [
+    {
+      "flow_id": "FLOW-MCP-WRITE",
+      "name": "MCP LLM 写链路",
+      "entry": "POST /mcp tools/call(create_node/update_node/delete_node/move_node/attach_file)",
+      "nodes": [
+        {
+          "node_id": "N-LLM-REQUEST",
+          "state": "收到 LLM tool call"
+        },
+        {
+          "node_id": "N-GUARD-PASS",
+          "state": "require_llm_session 通过"
+        },
+        {
+          "node_id": "N-EMIT",
+          "state": "emit llm-operation Tauri event"
+        },
+        {
+          "node_id": "N-FRONTEND-BRIDGE",
+          "state": "前端 operationBridge.listen 收到"
+        },
+        {
+          "node_id": "N-APPLY-OP",
+          "state": "applyOperation(parent_id 转换 + findEle + addChild/reshapeNode)"
+        },
+        {
+          "node_id": "N-MIND-ELIXIR-FIRE",
+          "state": "mind-elixir fire operation event"
+        },
+        {
+          "node_id": "N-SYNC",
+          "state": "syncFromMindElixir → setContent"
+        },
+        {
+          "node_id": "N-STORE-SUB",
+          "state": "mcpBridge.subscribe 检测 sig 变化"
+        },
+        {
+          "node_id": "N-MIRROR-PUSH",
+          "state": "invoke mcp_update_state"
+        }
+      ],
+      "edges": [
+        {
+          "edge_id": "E-GUARD",
+          "from": "N-LLM-REQUEST",
+          "action": "require_llm_session",
+          "guard": "session 有效",
+          "to": "N-GUARD-PASS"
+        },
+        {
+          "edge_id": "E-EMIT",
+          "from": "N-GUARD-PASS",
+          "action": "emit llm-operation",
+          "guard": "always",
+          "to": "N-EMIT"
+        },
+        {
+          "edge_id": "E-FRONTEND",
+          "from": "N-EMIT",
+          "action": "前端 listen",
+          "guard": "bridge 已启动",
+          "to": "N-FRONTEND-BRIDGE"
+        },
+        {
+          "edge_id": "E-APPLY",
+          "from": "N-FRONTEND-BRIDGE",
+          "action": "applyOperation",
+          "guard": "mind 实例就绪",
+          "to": "N-APPLY-OP"
+        },
+        {
+          "edge_id": "E-FIRE",
+          "from": "N-APPLY-OP",
+          "action": "mind-elixir 内部 fire",
+          "guard": "API 调用成功",
+          "to": "N-MIND-ELIXIR-FIRE"
+        },
+        {
+          "edge_id": "E-SYNC",
+          "from": "N-MIND-ELIXIR-FIRE",
+          "action": "syncFromMindElixir",
+          "guard": "listener 已注册",
+          "to": "N-SYNC"
+        },
+        {
+          "edge_id": "E-SUB",
+          "from": "N-SYNC",
+          "action": "mcpBridge subscribe",
+          "guard": "sig 变化",
+          "to": "N-STORE-SUB"
+        },
+        {
+          "edge_id": "E-PUSH",
+          "from": "N-STORE-SUB",
+          "action": "防抖 1s 后 invoke",
+          "guard": "filePath 存在",
+          "to": "N-MIRROR-PUSH"
+        }
+      ],
+      "terminal_states": [
+        {
+          "terminal_id": "T-WRITE-SUCCESS",
+          "state": "search/read_mindmap 找到新节点",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-REJECT-NO-SESSION",
+          "state": "无 session 被拒",
+          "type": "rejected"
+        },
+        {
+          "terminal_id": "T-LLM-RELEASE",
+          "state": "LLM 主动 release → editor=Human",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-USER-TAKEOVER",
+          "state": "用户接管 force_release",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-TTL-EXPIRE",
+          "state": "60s 无心跳自动 release",
+          "type": "success"
+        }
+      ],
+      "critical_side_effects": [
+        {
+          "side_effect_id": "SE-MARK-DIRTY",
+          "description": "store.dirty=true → useAutoSave 防抖"
+        },
+        {
+          "side_effect_id": "SE-AUTO-SAVE",
+          "description": "save_mmap 写盘"
+        },
+        {
+          "side_effect_id": "SE-AUDIT-LOG",
+          "description": "llm-audit.jsonl 写入"
+        }
+      ]
+    },
+    {
+      "flow_id": "FLOW-AUTO-SAVE",
+      "name": "自动保存 race condition",
+      "entry": "store.subscribe → useAutoSave 防抖 → invoke save_mmap",
+      "nodes": [
+        {
+          "node_id": "N-USER-EDIT",
+          "state": "用户改 topic"
+        },
+        {
+          "node_id": "N-SYNC-BACK",
+          "state": "syncFromMindElixir → setContent → markDirty"
+        },
+        {
+          "node_id": "N-DEBOUNCE",
+          "state": "2s 防抖"
+        },
+        {
+          "node_id": "N-INVOKE-SAVE",
+          "state": "invoke save_mmap(content_ref)"
+        },
+        {
+          "node_id": "N-SAVE-COMPLETE",
+          "state": "invoke 返回"
+        }
+      ],
+      "edges": [
+        {
+          "edge_id": "E-EDIT",
+          "from": "N-USER-EDIT",
+          "action": "改 topic",
+          "guard": "always",
+          "to": "N-SYNC-BACK"
+        },
+        {
+          "edge_id": "E-DEBOUNCE",
+          "from": "N-SYNC-BACK",
+          "action": "防抖",
+          "guard": "dirty=true",
+          "to": "N-DEBOUNCE"
+        },
+        {
+          "edge_id": "E-INVOKE",
+          "from": "N-DEBOUNCE",
+          "action": "invoke",
+          "guard": "filePath 存在",
+          "to": "N-INVOKE-SAVE"
+        },
+        {
+          "edge_id": "E-COMPLETE",
+          "from": "N-INVOKE-SAVE",
+          "action": "await 返回",
+          "guard": "成功",
+          "to": "N-SAVE-COMPLETE"
+        }
+      ],
+      "terminal_states": [
+        {
+          "terminal_id": "T-SAVED",
+          "state": "dirty=false 磁盘已写",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-RACE-RETAIN",
+          "state": "invoke 期间新改动 dirty 保留",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-SAVE-FAIL",
+          "state": "save 失败 saveStatus=error",
+          "type": "failed"
+        }
+      ],
+      "critical_side_effects": [
+        {
+          "side_effect_id": "SE-BAK",
+          "description": "save_mmap 写 .bak 备份"
+        }
+      ]
+    },
+    {
+      "flow_id": "FLOW-ATTACH-FILE",
+      "name": "附件附加",
+      "entry": "点附件图标 → openDialog → invoke attach_file_to_node",
+      "nodes": [
+        {
+          "node_id": "N-NODE-SELECTED",
+          "state": "节点已选中"
+        },
+        {
+          "node_id": "N-DIALOG-OPEN",
+          "state": "文件选择器打开"
+        },
+        {
+          "node_id": "N-BACKEND-COPY",
+          "state": "后端复制到 assets/{uuid}.{ext}"
+        },
+        {
+          "node_id": "N-FRONTEND-UPDATE",
+          "state": "updateContent 写入 attached_file"
+        }
+      ],
+      "edges": [
+        {
+          "edge_id": "E-CLICK",
+          "from": "N-NODE-SELECTED",
+          "action": "点附件图标",
+          "guard": "filePath 存在",
+          "to": "N-DIALOG-OPEN"
+        },
+        {
+          "edge_id": "E-ATTACH-INVOKE",
+          "from": "N-DIALOG-OPEN",
+          "action": "用户选文件 + invoke",
+          "guard": "文件有效",
+          "to": "N-BACKEND-COPY"
+        },
+        {
+          "edge_id": "E-UPDATE",
+          "from": "N-BACKEND-COPY",
+          "action": "updateContent",
+          "guard": "后端返回 AttachedFile",
+          "to": "N-FRONTEND-UPDATE"
+        }
+      ],
+      "terminal_states": [
+        {
+          "terminal_id": "T-ATTACH-SUCCESS",
+          "state": "画布显示缩略图 + 类型色边框 + 角标",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-ATTACH-NO-FILEPATH",
+          "state": "未保存文档被拒",
+          "type": "rejected"
+        }
+      ],
+      "critical_side_effects": [
+        {
+          "side_effect_id": "SE-FIXED-SIZE",
+          "description": "reshapeNode 设固定 80×80"
+        }
+      ]
+    },
+    {
+      "flow_id": "FLOW-MULTI-WINDOW",
+      "name": "多窗口子窗口关闭",
+      "entry": "点子窗口关闭按钮 → CloseRequested → prevent + async destroy",
+      "nodes": [
+        {
+          "node_id": "N-USER-CLOSE",
+          "state": "用户点关闭"
+        },
+        {
+          "node_id": "N-PREVENT",
+          "state": "api.prevent_close"
+        },
+        {
+          "node_id": "N-ASYNC-DESTROY",
+          "state": "std::thread::spawn destroy"
+        }
+      ],
+      "edges": [
+        {
+          "edge_id": "E-PREVENT",
+          "from": "N-USER-CLOSE",
+          "action": "prevent_close",
+          "guard": "label != main",
+          "to": "N-PREVENT"
+        },
+        {
+          "edge_id": "E-DESTROY",
+          "from": "N-PREVENT",
+          "action": "异步 destroy",
+          "guard": "always",
+          "to": "N-ASYNC-DESTROY"
+        }
+      ],
+      "terminal_states": [
+        {
+          "terminal_id": "T-WINDOW-DESTROYED",
+          "state": "窗口真销毁,资源释放",
+          "type": "success"
+        },
+        {
+          "terminal_id": "T-CLOSE-LOOP",
+          "state": "CloseRequested 死循环(CPU 100%)",
+          "type": "failed"
+        }
+      ],
+      "critical_side_effects": []
+    }
+  ],
+  "propositions": [
+    {
+      "proposition_id": "VP-PROTOCOL",
+      "source_ids": [
+        "F-007"
+      ],
+      "context": "外部 LLM 客户端连接 MCP server",
+      "stimulus": "POST /mcp JSON-RPC 2.0 请求(initialize/tools list/tools call)",
+      "expected": "符合 JSON-RPC 2.0 + MCP 2024-11-05 spec 的响应",
+      "invariants": [
+        "错误码符合 spec(-32700/-32600/-32601/-32602/-32603/-32000)"
+      ],
+      "risk_if_broken": "Claude Desktop 等客户端拒绝连接 / 行为不一致"
+    },
+    {
+      "proposition_id": "VP-MUTEX",
+      "source_ids": [
+        "F-007"
+      ],
+      "context": "Human 状态,多 LLM 并发 acquire",
+      "stimulus": "10 并发 acquire_session",
+      "expected": "恰好 1 个成功,9 个被拒 Editor is held by another",
+      "invariants": [
+        "任意时刻 Editor::Llm 最多 1 个 session"
+      ],
+      "risk_if_broken": "两个 LLM 同时持锁 → 数据冲突"
+    },
+    {
+      "proposition_id": "VP-MCP-WRITE-REAL",
+      "source_ids": [
+        "F-007",
+        "F-009",
+        "F-010",
+        "F-011",
+        "F-012"
+      ],
+      "context": "LLM 持有 session,文档已保存",
+      "stimulus": "create_node(parent_id='root', topic='测试') → release → 等 3s",
+      "expected": "search_nodes 找到该节点,read_mindmap 节点数 +1",
+      "invariants": [
+        "audit_log 有记录",
+        "mirror.current_content 有新节点"
+      ],
+      "risk_if_broken": "LLM 报告成功但实际数据未变 → 用户被欺骗"
+    },
+    {
+      "proposition_id": "VP-ATTACH-PERSIST",
+      "source_ids": [
+        "F-009",
+        "F-010"
+      ],
+      "context": "节点 A 有 attached_file",
+      "stimulus": "Tab 在 A 下加子节点(触发 syncFromMindElixir)",
+      "expected": "之后 A 的 attached_file 仍在",
+      "invariants": [
+        "fromMindElixirData 必须从 prevContent 按 id 继承 attached_file"
+      ],
+      "risk_if_broken": "用户加子节点 → 附件消失,信任崩塌"
+    },
+    {
+      "proposition_id": "VP-AUTOSAVE-RACE",
+      "source_ids": [
+        "F-008"
+      ],
+      "context": "dirty=true,有 filePath",
+      "stimulus": "invoke save_mmap 期间 setContent(新 content V2) → markDirty",
+      "expected": "invoke 完成后 store.content !== content_ref → dirty=true 保留",
+      "invariants": [
+        "dirty=(store.content !== lastSavedContent)"
+      ],
+      "risk_if_broken": "invoke 期间新改动被标已保存 → 重开丢失"
+    },
+    {
+      "proposition_id": "VP-TAKEOVER",
+      "source_ids": [
+        "F-007"
+      ],
+      "context": "LLM 持有 session,banner 显示",
+      "stimulus": "用户点接管按钮 → invoke llm_force_release",
+      "expected": "banner 消失 + canvas 解锁 + LLM 下次 create_node 被拒",
+      "invariants": [
+        "store.llmSession=null",
+        "mind-elixir-inner 无 llm-active class"
+      ],
+      "risk_if_broken": "用户失去对 LLM 的控制感"
+    },
+    {
+      "proposition_id": "VP-MULTIWINDOW-CLOSE",
+      "source_ids": [
+        "F-006"
+      ],
+      "context": "子窗口 doc-N 存在",
+      "stimulus": "点关闭按钮",
+      "expected": "CloseRequested log 出现 1-2 次,然后 Destroyed",
+      "invariants": [
+        "destroy 后窗口真销毁,无死循环"
+      ],
+      "risk_if_broken": "CPU 100% / 用户只能 kill 进程"
+    },
+    {
+      "proposition_id": "VP-NODE-CRUD",
+      "source_ids": [
+        "F-001"
+      ],
+      "context": "用户在画布",
+      "stimulus": "Tab/Enter/F2/Delete",
+      "expected": "节点正确增删改",
+      "invariants": [
+        "root 不能删"
+      ],
+      "risk_if_broken": "操作无效/数据丢"
+    },
+    {
+      "proposition_id": "VP-PRIORITY",
+      "source_ids": [
+        "F-002"
+      ],
+      "context": "选中节点",
+      "stimulus": "setPriority('P0')",
+      "expected": "DOM class + 图标",
+      "invariants": [
+        "P0-P3 梯度"
+      ],
+      "risk_if_broken": "不可见"
+    },
+    {
+      "proposition_id": "VP-REMINDER",
+      "source_ids": [
+        "F-003"
+      ],
+      "context": "节点 reminder",
+      "stimulus": "时间推进",
+      "expected": "状态转换 + 沙漏",
+      "invariants": [
+        "5 状态"
+      ],
+      "risk_if_broken": "不触发"
+    },
+    {
+      "proposition_id": "VP-ATTACH-TYPE",
+      "source_ids": [
+        "F-004"
+      ],
+      "context": "附加文件",
+      "stimulus": "8 种扩展名",
+      "expected": "类型识别 + 色边框 + 角标",
+      "invariants": [
+        "8 类型色"
+      ],
+      "risk_if_broken": "类型乱"
+    },
+    {
+      "proposition_id": "VP-EXPORT",
+      "source_ids": [
+        "F-005"
+      ],
+      "context": "content",
+      "stimulus": "export",
+      "expected": "格式正确",
+      "invariants": [
+        "不丢节点"
+      ],
+      "risk_if_broken": "导出无效"
+    }
+  ],
+  "coverage_obligations": [
+    {
+      "obligation_id": "OB-001",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "type": "rule",
+      "description": "MCP 协议合规(JSON-RPC 2.0)",
+      "protected_value": "PV-007",
+      "failure_mechanism": "错误码/格式不符 spec",
+      "criticality": "critical",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-001",
+        "TC-L1-002",
+        "TC-L1-003",
+        "TC-L1-004",
+        "TC-L1-005"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-002",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "type": "rule",
+      "description": "EditorMode Mutex 状态机",
+      "protected_value": "PV-002",
+      "failure_mechanism": "并发 acquire 漏锁/死锁",
+      "criticality": "critical",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-006",
+        "TC-L1-007",
+        "TC-L1-008",
+        "TC-L1-009"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-003",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "type": "state",
+      "description": "TTL 自动释放",
+      "protected_value": "PV-002",
+      "failure_mechanism": "TTL task 不触发/泄漏",
+      "criticality": "high",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-010",
+        "TC-L2-001"
+      ],
+      "status": "designed",
+      "residual_risk": "app 退出时 TTL task 是否泄漏未验证"
+    },
+    {
+      "obligation_id": "OB-004",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "type": "rule",
+      "description": "14 个 tool 参数校验 + emit",
+      "protected_value": "PV-007",
+      "failure_mechanism": "tool 缺参数/返回格式错",
+      "criticality": "high",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-011",
+        "TC-L1-012",
+        "TC-L1-013"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-005",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "type": "flow",
+      "description": "MCP CRUD 真实链路(emit→bridge→mind→store→mirror)",
+      "protected_value": "PV-003",
+      "failure_mechanism": "emit 成功但 mirror 不更新",
+      "criticality": "critical",
+      "primary_layer": "L2",
+      "case_ids": [
+        "TC-L2-002",
+        "TC-L2-003",
+        "TC-L2-004",
+        "TC-L2-005"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-006",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "type": "permission",
+      "description": "无 session 拒绝写",
+      "protected_value": "PV-002",
+      "failure_mechanism": "guard 不工作",
+      "criticality": "critical",
+      "primary_layer": "L2",
+      "case_ids": [
+        "TC-L1-009",
+        "TC-L2-006"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-007",
+      "source_ids": [
+        "F-008"
+      ],
+      "proposition_ids": [
+        "VP-AUTOSAVE-RACE"
+      ],
+      "type": "risk",
+      "description": "自动保存 race condition",
+      "protected_value": "PV-004",
+      "failure_mechanism": "markSaved 无条件覆盖 dirty",
+      "criticality": "critical",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-014",
+        "TC-L2-011"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-008",
+      "source_ids": [
+        "F-008"
+      ],
+      "proposition_ids": [
+        "VP-AUTOSAVE-RACE"
+      ],
+      "type": "rule",
+      "description": "save_mmap 原子写 + .bak 备份",
+      "protected_value": "PV-001",
+      "failure_mechanism": "写盘中断导致 content.json 损坏",
+      "criticality": "critical",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-015",
+        "TC-L2-011"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-009",
+      "source_ids": [
+        "F-009",
+        "F-010",
+        "F-011",
+        "F-012"
+      ],
+      "proposition_ids": [
+        "VP-ATTACH-PERSIST"
+      ],
+      "type": "rule",
+      "description": "adapter 双向同步 + attached_file 继承",
+      "protected_value": "PV-006",
+      "failure_mechanism": "fromMindElixirNode 不读 attached_file",
+      "criticality": "critical",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-016",
+        "TC-L1-017"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-010",
+      "source_ids": [
+        "F-001"
+      ],
+      "proposition_ids": [
+        "VP-NODE-CRUD"
+      ],
+      "type": "rule",
+      "description": "节点 CRUD 规则(Tab/Enter/F2/Del)",
+      "protected_value": "PV-001",
+      "failure_mechanism": "快捷键错位/不响应",
+      "criticality": "high",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-018",
+        "TC-L3-001"
+      ],
+      "status": "designed",
+      "residual_risk": "L3 真实键盘测试 Tauri webview 跟 Chrome 差异"
+    },
+    {
+      "obligation_id": "OB-011",
+      "source_ids": [
+        "F-002"
+      ],
+      "proposition_ids": [
+        "VP-PRIORITY"
+      ],
+      "type": "rule",
+      "description": "优先级 P0-P3 设置/清除 + DOM class",
+      "protected_value": "PV-001",
+      "failure_mechanism": "class 未加/图标不显示",
+      "criticality": "normal",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-019"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-012",
+      "source_ids": [
+        "F-003"
+      ],
+      "proposition_ids": [
+        "VP-REMINDER"
+      ],
+      "type": "rule",
+      "description": "提醒状态计算(future/looming/due/done/paused)",
+      "protected_value": "PV-001",
+      "failure_mechanism": "状态转换错误",
+      "criticality": "high",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-020"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-013",
+      "source_ids": [
+        "F-004"
+      ],
+      "proposition_ids": [
+        "VP-ATTACH-TYPE"
+      ],
+      "type": "rule",
+      "description": "附件类型识别 + 类型色映射",
+      "protected_value": "PV-001",
+      "failure_mechanism": "类型识别错/色映射不全",
+      "criticality": "normal",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-021",
+        "TC-L2-012",
+        "TC-L3-002"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-014",
+      "source_ids": [
+        "F-005"
+      ],
+      "proposition_ids": [
+        "VP-EXPORT"
+      ],
+      "type": "rule",
+      "description": "导入导出(markdown/opml/mermaid)",
+      "protected_value": "PV-001",
+      "failure_mechanism": "格式错/丢节点",
+      "criticality": "normal",
+      "primary_layer": "L1",
+      "case_ids": [
+        "TC-L1-022"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-015",
+      "source_ids": [
+        "F-006"
+      ],
+      "proposition_ids": [
+        "VP-MULTIWINDOW-CLOSE"
+      ],
+      "type": "flow",
+      "description": "多窗口子窗口关闭不死循环",
+      "protected_value": "PV-008",
+      "failure_mechanism": "CloseRequested 无限触发",
+      "criticality": "critical",
+      "primary_layer": "L2",
+      "case_ids": [
+        "TC-L2-007",
+        "TC-L2-013",
+        "TC-L3-003"
+      ],
+      "status": "designed",
+      "residual_risk": "macOS 26 Tahoe 行为差异"
+    },
+    {
+      "obligation_id": "OB-016",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-TAKEOVER"
+      ],
+      "type": "flow",
+      "description": "接管按钮 force_release + banner 消失",
+      "protected_value": "PV-005",
+      "failure_mechanism": "force_release 不生效/banner 不消失",
+      "criticality": "critical",
+      "primary_layer": "L3",
+      "case_ids": [
+        "TC-L2-008",
+        "TC-L3-004"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-017",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "type": "risk",
+      "description": "parent_id='root' 自动转 UUID + crypto.randomUUID",
+      "protected_value": "PV-003",
+      "failure_mechanism": "LLM 用 'root' 失败/addChild 不生成 id",
+      "criticality": "critical",
+      "primary_layer": "L2",
+      "case_ids": [
+        "TC-L2-002",
+        "TC-L2-009"
+      ],
+      "status": "designed",
+      "residual_risk": ""
+    },
+    {
+      "obligation_id": "OB-018",
+      "source_ids": [
+        "F-009"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "type": "risk",
+      "description": "reshapeNode bug 绕过(直接改 nodeObj)",
+      "protected_value": "PV-003",
+      "failure_mechanism": "reshapeNode 写到 DOM 不写 nodeObj",
+      "criticality": "high",
+      "primary_layer": "L2",
+      "case_ids": [
+        "TC-L2-003",
+        "TC-L2-010"
+      ],
+      "status": "designed",
+      "residual_risk": "U-001 非 Topic 字段未验证"
+    },
+    {
+      "obligation_id": "OB-019",
+      "source_ids": [
+        "U-003"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "type": "risk",
+      "description": "同文件多窗口 save_mmap 冲突",
+      "protected_value": "PV-001",
+      "failure_mechanism": "无锁文件机制,两窗口互相覆盖",
+      "criticality": "high",
+      "primary_layer": "L2",
+      "case_ids": [],
+      "status": "conditional",
+      "residual_risk": "U-003 机制不存在,需要产品决策"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "TC-L1-001",
+      "title": "JSON-RPC initialize 返回 protocolVersion + serverInfo + capabilities",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-001"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 MCP 协议握手返回合规响应",
+      "preconditions": [
+        "McpServer 实例化完成"
+      ],
+      "stimulus": [
+        "handle_request(initialize)"
+      ],
+      "oracle": {
+        "must": [
+          "protocolVersion='2024-11-05'",
+          "serverInfo.name/version 有值",
+          "capabilities.{tools,resources,prompts} 都是 object"
+        ],
+        "must_not": [
+          "error 字段出现"
+        ],
+        "time_boundary": "同步确定性结果"
+      },
+      "controls": {
+        "data": "无外部数据",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/protocol.rs::tests::test_initialize_returns_protocol_version_and_capabilities",
+        "run_profiles": [
+          "local",
+          "pr",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "McpServer::handle_initialize",
+        "rule_or_invariant": "initialize 必须返回 protocolVersion='2024-11-05' + serverInfo + capabilities",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-002",
+      "title": "未知 JSON-RPC 方法返回 method_not_found(-32601)",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-001"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明协议层正确处理未知方法",
+      "preconditions": [
+        "McpServer 实例化完成"
+      ],
+      "stimulus": [
+        "handle_request('nonexistent/method')"
+      ],
+      "oracle": {
+        "must": [
+          "error.code=-32601",
+          "error.message='Method not found'"
+        ],
+        "must_not": [
+          "result 字段出现"
+        ],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/protocol.rs::tests::test_unknown_method_returns_method_not_found",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "McpServer::handle_request",
+        "rule_or_invariant": "未知方法返回 -32601",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-003",
+      "title": "tools/call 缺 name 参数返回 invalid_params(-32602)",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-001"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明协议层拒绝缺参请求",
+      "preconditions": [
+        "McpServer 注册了至少 1 个 tool"
+      ],
+      "stimulus": [
+        "tools/call 无 name 字段"
+      ],
+      "oracle": {
+        "must": [
+          "error.code=-32602"
+        ],
+        "must_not": [
+          "tool 被执行"
+        ],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "EchoTool 注册",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/protocol.rs::tests::test_tools_call_missing_name_returns_invalid_params",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "McpServer::handle_tools_call",
+        "rule_or_invariant": "缺 name 拒绝",
+        "test_doubles": [
+          "EchoTool"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-004",
+      "title": "invalid jsonrpc version 返回 invalid_request(-32600)",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-001"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明协议层校验 jsonrpc 版本",
+      "preconditions": [
+        "McpServer 实例化"
+      ],
+      "stimulus": [
+        "jsonrpc='1.0' 的 initialize"
+      ],
+      "oracle": {
+        "must": [
+          "error.code=-32600"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/protocol.rs::tests::test_invalid_jsonrpc_version_returns_invalid_request",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "McpServer::handle_request",
+        "rule_or_invariant": "jsonrpc 必须='2.0'",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-005",
+      "title": "tools/list 返回所有注册 tools 的 name+description+inputSchema",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-001"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明协议层正确序列化 tool 清单",
+      "preconditions": [
+        "McpServer 注册 2 个 tool"
+      ],
+      "stimulus": [
+        "tools/list"
+      ],
+      "oracle": {
+        "must": [
+          "result.tools 数组长度=2",
+          "每个 tool 有 name/description/inputSchema"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "EchoTool+FailingTool",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/protocol.rs::tests::test_tools_list_returns_all_registered_tools",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "McpServer::handle_tools_list",
+        "rule_or_invariant": "返回全部注册 tool",
+        "test_doubles": [
+          "EchoTool",
+          "FailingTool"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-006",
+      "title": "EditorMode 初始为 Human",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-002"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 EditorMode 初始状态",
+      "preconditions": [
+        "新建 EditorMode"
+      ],
+      "stimulus": [
+        "current()"
+      ],
+      "oracle": {
+        "must": [
+          "editor.is_human()=true",
+          "editor.is_llm()=false"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/editor_mode.rs::tests::test_starts_as_human",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "EditorMode",
+        "rule_or_invariant": "初始 Human",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-007",
+      "title": "acquire 成功后 editor 变为 Llm",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-002"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 acquire 状态转换",
+      "preconditions": [
+        "Human 状态"
+      ],
+      "stimulus": [
+        "try_acquire_llm('s1', 'client', 60000)"
+      ],
+      "oracle": {
+        "must": [
+          "Ok(())",
+          "current().is_llm()=true",
+          "session_id()='s1'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "release_llm",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/editor_mode.rs::tests::test_acquire_changes_to_llm",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "EditorMode::try_acquire_llm",
+        "rule_or_invariant": "acquire 成功转换状态",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-008",
+      "title": "第二个 session acquire 被拒",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-002"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明互斥锁拒绝并发 acquire",
+      "preconditions": [
+        "s1 已 acquire"
+      ],
+      "stimulus": [
+        "try_acquire_llm('s2', 'client2', 60000)"
+      ],
+      "oracle": {
+        "must": [
+          "Err(code=-32000)",
+          "message 含 'held by another'"
+        ],
+        "must_not": [
+          "current().session_id()='s2'"
+        ],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "release_llm('s1')",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/editor_mode.rs::tests::test_second_session_acquire_fails",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "EditorMode::try_acquire_llm",
+        "rule_or_invariant": "Llm 状态拒绝新 acquire",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-009",
+      "title": "require_llm_session 在无 session 时拒绝",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-002",
+        "OB-006"
+      ],
+      "layer": "L1",
+      "responsibility": "reinforcement",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明写操作的前置 guard",
+      "preconditions": [
+        "Human 状态"
+      ],
+      "stimulus": [
+        "require_llm_session('any')"
+      ],
+      "oracle": {
+        "must": [
+          "Err",
+          "message 含 'no active LLM session'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/editor_mode.rs::tests::test_require_llm_session_fails_when_human",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "EditorMode::require_llm_session",
+        "rule_or_invariant": "Human 时拒绝",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-010",
+      "title": "TTL 过期自动释放 session",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-003"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "risk",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 TTL task 自动释放过期 session",
+      "preconditions": [
+        "acquire session ttl_ms=1"
+      ],
+      "stimulus": [
+        "sleep 10ms",
+        "check_ttl_expiry()"
+      ],
+      "oracle": {
+        "must": [
+          "返回 Some('s1')",
+          "current().is_human()=true"
+        ],
+        "must_not": [],
+        "time_boundary": "10ms 内释放"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/editor_mode.rs::tests::test_ttl_expiry_releases_session",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "EditorMode::check_ttl_expiry",
+        "rule_or_invariant": "TTL 过期自动 release",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-011",
+      "title": "acquire_session tool 返回 session_id + expires_at",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-004"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 acquire tool 正确返回",
+      "preconditions": [
+        "Human 状态"
+      ],
+      "stimulus": [
+        "acquire_session tool call(client_name='test')"
+      ],
+      "oracle": {
+        "must": [
+          "session_id 非空",
+          "expires_at_ms > acquired_at_ms",
+          "emit session_changed reason='acquired'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "release",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/tools_session.rs::tests::test_acquire_returns_session_id_and_expiry",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "AcquireSessionTool",
+        "rule_or_invariant": "acquire 返回 session 信息 + emit",
+        "test_doubles": [
+          "MockEmitter"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-012",
+      "title": "create_node tool 缺 session_id 返回 invalid_params",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-PROTOCOL"
+      ],
+      "obligation_ids": [
+        "OB-004"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 create_node 参数校验",
+      "preconditions": [
+        "无 session"
+      ],
+      "stimulus": [
+        "create_node 无 session_id"
+      ],
+      "oracle": {
+        "must": [
+          "error.code=-32602"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/tools_write.rs::tests::test_create_node_missing_session_id",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "CreateNodeTool",
+        "rule_or_invariant": "缺 session_id 拒绝",
+        "test_doubles": [
+          "MockEmitter"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-013",
+      "title": "create_node 无效 session 被 guard 拦截",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-004"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明 write tool 走 require_llm_session guard",
+      "preconditions": [
+        "Human 状态"
+      ],
+      "stimulus": [
+        "create_node session_id='invalid'"
+      ],
+      "oracle": {
+        "must": [
+          "error.code=-32000",
+          "message 含 'no active LLM session' 或 'different'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mcp/tools_write.rs::tests::test_create_node_without_session_fails_guard",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "WriteToolContext::execute_op",
+        "rule_or_invariant": "guard 拦截无效 session",
+        "test_doubles": [
+          "MockEmitter"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-014",
+      "title": "useAutoSave invoke 期间新改动 dirty 保留(回归 bug)",
+      "source_ids": [
+        "F-008"
+      ],
+      "proposition_ids": [
+        "VP-AUTOSAVE-RACE"
+      ],
+      "obligation_ids": [
+        "OB-007"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "risk",
+      "priority": "critical",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明历史 bug(markSaved 覆盖)已修,且不再复发",
+      "preconditions": [
+        "dirty=true,filePath 存在"
+      ],
+      "stimulus": [
+        "invoke pending 期间 updateContent(V2)",
+        "resolve invoke"
+      ],
+      "oracle": {
+        "must": [
+          "dirty=true(content !== ref)",
+          "setSaveStatus='saved' 但 dirty 保留",
+          "scheduleSave 重新调度"
+        ],
+        "must_not": [
+          "markSaved 把 dirty 设为 false"
+        ],
+        "time_boundary": "resolve 后立即成立"
+      },
+      "controls": {
+        "data": "fake timers + mock invoke",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/hooks/useAutoSave.test.ts::FE-AUTOSAVE-10",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "useAutoSave 内部 scheduleSave",
+        "rule_or_invariant": "content !== ref 时 dirty=true",
+        "test_doubles": [
+          "fake timers",
+          "mock invoke"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-015",
+      "title": "save_mmap 原子写 + .bak 备份",
+      "source_ids": [
+        "F-008"
+      ],
+      "proposition_ids": [
+        "VP-AUTOSAVE-RACE"
+      ],
+      "obligation_ids": [
+        "OB-008"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "rust-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明原子写策略:tmp→rename + .bak",
+      "preconditions": [
+        "存在 content.json 的 mmap 目录"
+      ],
+      "stimulus": [
+        "MmapFile::save()"
+      ],
+      "oracle": {
+        "must": [
+          "content.json 是新内容",
+          "content.json.bak 是旧内容",
+          "无 content.json.tmp 残留"
+        ],
+        "must_not": [],
+        "time_boundary": "save 返回后立即"
+      },
+      "controls": {
+        "data": "tmp 目录",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "rm -rf tmp",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/mmap.rs::tests::save_generates_backup",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "MmapFile::save",
+        "rule_or_invariant": "原子写 + 备份",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-016",
+      "title": "fromMindElixirData 从 prevContent 继承 attached_file(回归 bug)",
+      "source_ids": [
+        "F-009",
+        "F-012"
+      ],
+      "proposition_ids": [
+        "VP-ATTACH-PERSIST"
+      ],
+      "obligation_ids": [
+        "OB-009"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明历史 bug(attached_file 在 Tab 加子节点丢失)已修",
+      "preconditions": [
+        "prevContent 节点 A 有 attached_file"
+      ],
+      "stimulus": [
+        "fromMindElixirData(data with A.children 加新节点, prevContent)"
+      ],
+      "oracle": {
+        "must": [
+          "新 content 节点 A 的 attached_file 仍在",
+          "新子节点存在"
+        ],
+        "must_not": [
+          "A 的 attached_file=null"
+        ],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "mock prevContent",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/utils/mindElixirAdapter.test.ts::FE-ADAPT-33",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "fromMindElixirData",
+        "rule_or_invariant": "按 id 继承 attached_file",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-017",
+      "title": "fromMindElixirData 节点被删除时 attached_file 不复活",
+      "source_ids": [
+        "F-009"
+      ],
+      "proposition_ids": [
+        "VP-ATTACH-PERSIST"
+      ],
+      "obligation_ids": [
+        "OB-009"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "high",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明继承机制不导致已删节点复活",
+      "preconditions": [
+        "prevContent 有 A+B,B 有 attached_file"
+      ],
+      "stimulus": [
+        "fromMindElixirData(data 只有 A)"
+      ],
+      "oracle": {
+        "must": [
+          "新 content 只有 A",
+          "B 不存在"
+        ],
+        "must_not": [
+          "B 出现"
+        ],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "mock",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/utils/mindElixirAdapter.test.ts::FE-ADAPT-35",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "fromMindElixirData",
+        "rule_or_invariant": "节点删除时 attached_file 跟随删除",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-018",
+      "title": "节点 CRUD 规则(Tab=子/Enter=兄/F2=编辑/Delete=删)",
+      "source_ids": [
+        "F-001"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-010"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "high",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明节点 CRUD 业务规则",
+      "preconditions": [
+        "有 root 节点"
+      ],
+      "stimulus": [
+        "Tab/Enter/F2/Delete 各种组合"
+      ],
+      "oracle": {
+        "must": [
+          "Tab 在 selected 下加子节点",
+          "Enter 加兄弟",
+          "F2 进入编辑",
+          "Delete 删除非 root"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "mock mind-elixir",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/utils/nodeActions.test.ts",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "nodeActions",
+        "rule_or_invariant": "CRUD 规则符合需求",
+        "test_doubles": [
+          "mock mind-elixir"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L1-019",
+      "title": "优先级 P0-P3 设置后 me-tpc 加对应 class",
+      "source_ids": [
+        "F-002"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-011"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "normal",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明优先级 DOM 反映",
+      "preconditions": [
+        "选中节点"
+      ],
+      "stimulus": [
+        "setPriority('P0')"
+      ],
+      "oracle": {
+        "must": [
+          "tpc.classList 含 'priority-p0'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "mock",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/components/TabProperties.test.tsx::优先级按钮",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "setPriorityForSelected + syncPriorityStyles",
+        "rule_or_invariant": "优先级 → DOM class",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-020",
+      "title": "computeNodeReminderState 5 种状态转换正确",
+      "source_ids": [
+        "F-003"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-012"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "high",
+      "owner": "frontend-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明提醒状态计算规则",
+      "preconditions": [
+        "now 固定"
+      ],
+      "stimulus": [
+        "trigger_at 在 now-future/looming/due/done/paused 各种相对位置"
+      ],
+      "oracle": {
+        "must": [
+          "state ∈ {future, looming, due, done, paused}",
+          "remainingRatio 在 [0,1]"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "固定 now + 多个 trigger_at",
+        "dependencies": "无",
+        "time_randomness": "固定 now"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "vitest 输出 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "vitest",
+        "entrypoint": "src/utils/reminderState.test.ts",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "computeNodeReminderState",
+        "rule_or_invariant": "时间 → 状态映射",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-021",
+      "title": "FileType::from_extension 8 类型识别",
+      "source_ids": [
+        "F-004"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-013"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "normal",
+      "owner": "rust-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明附件类型识别",
+      "preconditions": [
+        "无"
+      ],
+      "stimulus": [
+        "jpg/pdf/pptx/docx/xlsx/mp4/mp3/xyz"
+      ],
+      "oracle": {
+        "must": [
+          "image/pdf/slide/doc/sheet/video/audio/other 对应正确"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "扩展名字符串",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/models.rs::FileType::from_extension tests",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "FileType::from_extension",
+        "rule_or_invariant": "扩展名 → 类型",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L1-022",
+      "title": "export_markdown + export_opml + export_mermaid 正确",
+      "source_ids": [
+        "F-005"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-014"
+      ],
+      "layer": "L1",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "normal",
+      "owner": "rust-team",
+      "lifecycle_status": "regression_active",
+      "intent": "证明导出格式",
+      "preconditions": [
+        "有 3 节点 content"
+      ],
+      "stimulus": [
+        "export_markdown/opml/mermaid"
+      ],
+      "oracle": {
+        "must": [
+          "md 含 '#'",
+          "opml 含 '<opml'",
+          "mermaid 含 'mindmap'"
+        ],
+        "must_not": [],
+        "time_boundary": "同步"
+      },
+      "controls": {
+        "data": "mock content",
+        "dependencies": "无",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust 测试 PASS/FAIL"
+      ],
+      "automation": {
+        "adapter": "cargo-test",
+        "entrypoint": "src-tauri/src/markdown.rs + opml.rs tests",
+        "run_profiles": [
+          "local",
+          "pr"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "unit_under_test": "export_markdown + export_opml",
+        "rule_or_invariant": "导出格式正确",
+        "test_doubles": []
+      }
+    },
+    {
+      "case_id": "TC-L2-001",
+      "title": "TTL 后台 task 自动释放并 emit expired 事件",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-003"
+      ],
+      "layer": "L2",
+      "responsibility": "reinforcement",
+      "category": "risk",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 TTL task 真实触发,不只单元测试 mock",
+      "preconditions": [
+        "启动 dev app",
+        "EditorMode + SessionRegistry 注册到 Tauri state"
+      ],
+      "stimulus": [
+        "acquire ttl=1s",
+        "sleep 2s"
+      ],
+      "oracle": {
+        "must": [
+          "editor=Human",
+          "registry 无此 session",
+          "前端收到 llm-session-changed reason='expired'"
+        ],
+        "must_not": [
+          "session 还在 registry"
+        ],
+        "time_boundary": "2s 内"
+      },
+      "controls": {
+        "data": "临时 session",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无(自动过期)",
+      "evidence": [
+        "audit log + Rust stdout"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh TTL 部分(待加)",
+        "run_profiles": [
+          "local",
+          "scheduled",
+          "release"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "TTL 后台 task",
+        "end_state": "editor=Human + registry 清理 + 前端通知",
+        "side_effects": [
+          "emit llm-session-changed"
+        ],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-MIRROR-PUSH"
+          ],
+          "edge_ids": [
+            "E-GUARD"
+          ],
+          "terminal_ids": [
+            "T-TTL-EXPIRE"
+          ],
+          "side_effect_ids": [
+            "SE-AUDIT-LOG"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-002",
+      "title": "create_node 真实链路:emit→bridge→mind→store→mirror→search 找到",
+      "source_ids": [
+        "F-007",
+        "F-011",
+        "F-012"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-005",
+        "OB-017"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 LLM create_node 在真实 Tauri 模式下端到端生效(不是只 emit)",
+      "preconditions": [
+        "dev app 跑",
+        "文档已保存 filePath"
+      ],
+      "stimulus": [
+        "acquire",
+        "create_node(parent_id='root', topic='E2E-测试')",
+        "release",
+        "sleep 3s"
+      ],
+      "oracle": {
+        "must": [
+          "search_nodes 找到新节点",
+          "节点有 crypto.randomUUID 生成的 id"
+        ],
+        "must_not": [
+          "emit 成功但 search 找 0 个"
+        ],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时 topic",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "delete_node + release",
+      "evidence": [
+        "curl 输出 + audit log"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh create_node 部分",
+        "run_profiles": [
+          "local",
+          "scheduled",
+          "release"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "POST /mcp tools/call create_node",
+        "end_state": "search_nodes 找到节点",
+        "side_effects": [
+          "audit log 写入",
+          "store.content 加节点"
+        ],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-LLM-REQUEST",
+            "N-GUARD-PASS",
+            "N-EMIT",
+            "N-FRONTEND-BRIDGE",
+            "N-APPLY-OP",
+            "N-MIND-ELIXIR-FIRE",
+            "N-SYNC",
+            "N-STORE-SUB",
+            "N-MIRROR-PUSH"
+          ],
+          "edge_ids": [
+            "E-GUARD",
+            "E-EMIT",
+            "E-FRONTEND",
+            "E-APPLY",
+            "E-FIRE",
+            "E-SYNC",
+            "E-SUB",
+            "E-PUSH"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS",
+            "T-LLM-RELEASE"
+          ],
+          "side_effect_ids": [
+            "SE-MARK-DIRTY",
+            "SE-AUTO-SAVE",
+            "SE-AUDIT-LOG"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-003",
+      "title": "update_node 真实链路:改名后 search 找到新名",
+      "source_ids": [
+        "F-009"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-005",
+        "OB-018"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 update_node 直接改 nodeObj 绕过 reshapeNode bug",
+      "preconditions": [
+        "dev app + 节点已存在"
+      ],
+      "stimulus": [
+        "create_node(T)",
+        "update_node(改 topic='改-T')",
+        "search '改-T'"
+      ],
+      "oracle": {
+        "must": [
+          "search 找到 '改-T'"
+        ],
+        "must_not": [
+          "reshapeNode 写到 DOM 不写 nodeObj 导致旧 topic 还在"
+        ],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时 topic",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "delete_node + release",
+      "evidence": [
+        "curl 输出"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh update_node 部分(待加)",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "tools/call update_node",
+        "end_state": "search 找到新 topic",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-APPLY-OP"
+          ],
+          "edge_ids": [
+            "E-APPLY"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-004",
+      "title": "delete_node 真实链路:删除后 search 找 0",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-005"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 delete_node 真生效",
+      "preconditions": [
+        "节点存在"
+      ],
+      "stimulus": [
+        "delete_node",
+        "search"
+      ],
+      "oracle": {
+        "must": [
+          "search 0 匹配"
+        ],
+        "must_not": [],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时节点",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "curl 输出"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh delete_node 部分(待加)",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "tools/call delete_node",
+        "end_state": "search 0 匹配",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-APPLY-OP"
+          ],
+          "edge_ids": [
+            "E-APPLY"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-005",
+      "title": "move_node 真实链路:移动后 search 仍能找到(在新父下)",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-005"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "high",
+      "owner": "mcp-team",
+      "lifecycle_status": "draft",
+      "intent": "证明 move_node 真生效",
+      "preconditions": [
+        "两个节点都存在"
+      ],
+      "stimulus": [
+        "move_node(A, to_parent_id=B)",
+        "read_mindmap 看 B.children 含 A"
+      ],
+      "oracle": {
+        "must": [
+          "B.children 含 A.id"
+        ],
+        "must_not": [],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时节点",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "delete",
+      "evidence": [
+        "curl 输出"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "待实施 scripts/verify-mcp-live.sh move_node",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "tools/call move_node",
+        "end_state": "节点位置改变",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-APPLY-OP"
+          ],
+          "edge_ids": [
+            "E-APPLY"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-006",
+      "title": "无 session 时 create_node 被拒(端到端)",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-MUTEX"
+      ],
+      "obligation_ids": [
+        "OB-006"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "negative",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 guard 在真实链路生效",
+      "preconditions": [
+        "无 session"
+      ],
+      "stimulus": [
+        "create_node(session_id='invalid')"
+      ],
+      "oracle": {
+        "must": [
+          "result.isError=true",
+          "text 含 'no active LLM session'"
+        ],
+        "must_not": [],
+        "time_boundary": "立即"
+      },
+      "controls": {
+        "data": "无",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "curl 输出"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh L8 无效 session 部分",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "tools/call create_node",
+        "end_state": "拒绝",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-LLM-REQUEST"
+          ],
+          "edge_ids": [
+            "E-GUARD"
+          ],
+          "terminal_ids": [
+            "T-REJECT-NO-SESSION",
+            "T-USER-TAKEOVER",
+            "T-TTL-EXPIRE"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-007",
+      "title": "子窗口关闭不卡 CloseRequested 死循环",
+      "source_ids": [
+        "F-006"
+      ],
+      "proposition_ids": [
+        "VP-MULTIWINDOW-CLOSE"
+      ],
+      "obligation_ids": [
+        "OB-015"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "risk",
+      "priority": "critical",
+      "owner": "rust-team",
+      "lifecycle_status": "draft",
+      "intent": "证明历史 bug(CloseRequested 无限循环)已修",
+      "preconditions": [
+        "子窗口 doc-N 存在"
+      ],
+      "stimulus": [
+        "点子窗口关闭按钮"
+      ],
+      "oracle": {
+        "must": [
+          "CloseRequested log 出现 1-2 次",
+          "Destroyed log 出现",
+          "窗口从 list_windows 消失"
+        ],
+        "must_not": [
+          "CloseRequested log 重复 > 5 次"
+        ],
+        "time_boundary": "10s 内"
+      },
+      "controls": {
+        "data": "临时窗口",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust stdout + list_windows 输出"
+      ],
+      "automation": {
+        "adapter": "shell",
+        "entrypoint": "待实施 scripts/verify-multiwindow-close.sh",
+        "run_profiles": [
+          "local",
+          "scheduled",
+          "release"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MULTI-WINDOW"
+        ],
+        "business_entry": "点关闭按钮",
+        "end_state": "窗口真销毁",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-USER-CLOSE",
+            "N-PREVENT",
+            "N-ASYNC-DESTROY"
+          ],
+          "edge_ids": [
+            "E-PREVENT",
+            "E-DESTROY"
+          ],
+          "terminal_ids": [
+            "T-WINDOW-DESTROYED"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-008",
+      "title": "用户接管按钮 invoke llm_force_release 后 LLM 下次写被拒",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-TAKEOVER"
+      ],
+      "obligation_ids": [
+        "OB-016"
+      ],
+      "layer": "L2",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "mcp-team",
+      "lifecycle_status": "automated",
+      "intent": "证明接管端到端生效(LLM 失去锁)",
+      "preconditions": [
+        "LLM 持有 session"
+      ],
+      "stimulus": [
+        "模拟用户 invoke llm_force_release",
+        "再 create_node(原 session)"
+      ],
+      "oracle": {
+        "must": [
+          "第二次 create_node 被拒 'Not authorized'"
+        ],
+        "must_not": [
+          "原 session 还能写"
+        ],
+        "time_boundary": "立即"
+      },
+      "controls": {
+        "data": "临时 session",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "curl 输出"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "待实施(需前端 invoke 或 Tauri command 直调)",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "Tauri command llm_force_release",
+        "end_state": "LLM 下次写被拒",
+        "side_effects": [
+          "emit session_changed reason='forced'"
+        ],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-LLM-REQUEST"
+          ],
+          "edge_ids": [
+            "E-GUARD"
+          ],
+          "terminal_ids": [
+            "T-USER-TAKEOVER"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-009",
+      "title": "parent_id='root' 自动转真实 UUID(回归 LLM 不知道真实 id)",
+      "source_ids": [
+        "F-011",
+        "F-012"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-017"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "risk",
+      "priority": "critical",
+      "owner": "frontend-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 LLM 用 'root' 约定能工作(不抛 FindEle throw)",
+      "preconditions": [
+        "store.content.root.id 是 UUID"
+      ],
+      "stimulus": [
+        "create_node(parent_id='root')"
+      ],
+      "oracle": {
+        "must": [
+          "applyOperation 内部把 'root' 替换为真实 UUID",
+          "新节点创建成功"
+        ],
+        "must_not": [
+          "findEle('root') throw 'Node root not found'"
+        ],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "delete",
+      "evidence": [
+        "echo log + curl"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "scripts/verify-mcp-live.sh create_node 'root'",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "create_node parent_id='root'",
+        "end_state": "节点真创建",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-APPLY-OP"
+          ],
+          "edge_ids": [
+            "E-APPLY"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-010",
+      "title": "update_node 绕过 reshapeNode bug(直接改 nodeObj)",
+      "source_ids": [
+        "F-009"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-018"
+      ],
+      "layer": "L2",
+      "responsibility": "primary",
+      "category": "risk",
+      "priority": "high",
+      "owner": "frontend-team",
+      "lifecycle_status": "automated",
+      "intent": "证明 reshapeNode bug 绕过方案有效",
+      "preconditions": [
+        "节点存在"
+      ],
+      "stimulus": [
+        "update_node(topic='新名')"
+      ],
+      "oracle": {
+        "must": [
+          "nodeObj.topic='新名'",
+          "DOM text 同步更新",
+          "fire operation 触发 syncFromMindElixir"
+        ],
+        "must_not": [
+          "reshapeNode 写到 DOM 元素本身"
+        ],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "delete",
+      "evidence": [
+        "curl + store 状态"
+      ],
+      "automation": {
+        "adapter": "curl+shell",
+        "entrypoint": "TC-L2-003 同步",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MCP-WRITE"
+        ],
+        "business_entry": "update_node",
+        "end_state": "nodeObj + DOM 同步",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-APPLY-OP"
+          ],
+          "edge_ids": [
+            "E-APPLY"
+          ],
+          "terminal_ids": [
+            "T-WRITE-SUCCESS"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-011",
+      "title": "自动保存完整链路:用户编辑→防抖→invoke save_mmap→.bak 备份",
+      "source_ids": [
+        "F-008"
+      ],
+      "proposition_ids": [
+        "VP-AUTOSAVE-RACE"
+      ],
+      "obligation_ids": [
+        "OB-007",
+        "OB-008"
+      ],
+      "layer": "L2",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "frontend-team",
+      "lifecycle_status": "automated",
+      "intent": "证明真实编辑链路:debounce→invoke→原子写→备份",
+      "preconditions": [
+        "dev app + 已保存 filePath"
+      ],
+      "stimulus": [
+        "用户改 topic",
+        "等 2.5s(防抖+invoke)"
+      ],
+      "oracle": {
+        "must": [
+          "磁盘 content.json 已更新",
+          "content.json.bak 是旧内容",
+          "store.dirty=false"
+        ],
+        "must_not": [],
+        "time_boundary": "3s 内"
+      },
+      "controls": {
+        "data": "临时 mmap",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "rm 临时 mmap",
+      "evidence": [
+        "磁盘文件 + store 状态"
+      ],
+      "automation": {
+        "adapter": "shell+vitest",
+        "entrypoint": "src/hooks/useAutoSave.test.ts 集成部分",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-AUTO-SAVE"
+        ],
+        "business_entry": "用户改 topic",
+        "end_state": "磁盘 + store 都更新",
+        "side_effects": [
+          ".bak 备份生成"
+        ],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-USER-EDIT",
+            "N-SYNC-BACK",
+            "N-DEBOUNCE",
+            "N-INVOKE-SAVE",
+            "N-SAVE-COMPLETE"
+          ],
+          "edge_ids": [
+            "E-EDIT",
+            "E-DEBOUNCE",
+            "E-INVOKE",
+            "E-COMPLETE"
+          ],
+          "terminal_ids": [
+            "T-SAVED",
+            "T-RACE-RETAIN",
+            "T-SAVE-FAIL"
+          ],
+          "side_effect_ids": [
+            "SE-BAK"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-012",
+      "title": "附件附加真实链路:点图标→选文件→后端复制→画布显示",
+      "source_ids": [
+        "F-004"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-013"
+      ],
+      "layer": "L2",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "high",
+      "owner": "rust-team",
+      "lifecycle_status": "automated",
+      "intent": "证明附件链路:dialog→attach_file_to_node→updateContent",
+      "preconditions": [
+        "dev app + 节点已选 + filePath 存在"
+      ],
+      "stimulus": [
+        "点 PDF 图标",
+        "选 mock 文件"
+      ],
+      "oracle": {
+        "must": [
+          "画布显示缩略图",
+          "store.content 节点有 attached_file",
+          "mmap assets/ 有文件"
+        ],
+        "must_not": [],
+        "time_boundary": "2s 内"
+      },
+      "controls": {
+        "data": "mock 文件",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "remove attached",
+      "evidence": [
+        "curl read_mindmap + 磁盘 assets/"
+      ],
+      "automation": {
+        "adapter": "shell",
+        "entrypoint": "scripts/verify-attach.sh(待实施)",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-ATTACH-FILE"
+        ],
+        "business_entry": "点附件图标",
+        "end_state": "画布+store+磁盘都有附件",
+        "side_effects": [
+          "固定 80×80 设置"
+        ],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-NODE-SELECTED",
+            "N-DIALOG-OPEN",
+            "N-BACKEND-COPY",
+            "N-FRONTEND-UPDATE"
+          ],
+          "edge_ids": [
+            "E-CLICK",
+            "E-ATTACH-INVOKE",
+            "E-UPDATE"
+          ],
+          "terminal_ids": [
+            "T-ATTACH-SUCCESS",
+            "T-ATTACH-NO-FILEPATH"
+          ],
+          "side_effect_ids": [
+            "SE-FIXED-SIZE"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "TC-L2-013",
+      "title": "子窗口关闭失败终态(CloseRequested 死循环)防御验证",
+      "source_ids": [
+        "F-006"
+      ],
+      "proposition_ids": [
+        "VP-MULTIWINDOW-CLOSE"
+      ],
+      "obligation_ids": [
+        "OB-015"
+      ],
+      "layer": "L2",
+      "responsibility": "reinforcement",
+      "category": "risk",
+      "priority": "critical",
+      "owner": "rust-team",
+      "lifecycle_status": "draft",
+      "intent": "证明 T-CLOSE-LOOP 失败终态不会发生(防御性验证)",
+      "preconditions": [
+        "子窗口存在"
+      ],
+      "stimulus": [
+        "点关闭按钮"
+      ],
+      "oracle": {
+        "must": [
+          "CloseRequested 最多 2 次",
+          "不进入死循环"
+        ],
+        "must_not": [
+          "T-CLOSE-LOOP 出现"
+        ],
+        "time_boundary": "10s"
+      },
+      "controls": {
+        "data": "临时窗口",
+        "dependencies": "dev app",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust stdout 日志计数"
+      ],
+      "automation": {
+        "adapter": "shell",
+        "entrypoint": "scripts/verify-multiwindow-close.sh(同 TC-L2-007)",
+        "run_profiles": [
+          "local",
+          "release"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "flow_ids": [
+          "FLOW-MULTI-WINDOW"
+        ],
+        "business_entry": "点关闭按钮",
+        "end_state": "T-CLOSE-LOOP 不出现",
+        "side_effects": [],
+        "covered_flow_elements": {
+          "node_ids": [
+            "N-USER-CLOSE",
+            "N-PREVENT",
+            "N-ASYNC-DESTROY"
+          ],
+          "edge_ids": [
+            "E-PREVENT",
+            "E-DESTROY"
+          ],
+          "terminal_ids": [
+            "T-WINDOW-DESTROYED",
+            "T-CLOSE-LOOP"
+          ],
+          "side_effect_ids": []
+        }
+      }
+    },
+    {
+      "case_id": "TC-L3-001",
+      "title": "真实键盘 Tab 加子节点:画布出现新 tpc 元素",
+      "source_ids": [
+        "F-001"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-010"
+      ],
+      "layer": "L3",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "high",
+      "owner": "qa-team",
+      "lifecycle_status": "draft",
+      "intent": "证明真实键盘操作触发节点创建(不只 mind-elixir.fire 单测)",
+      "preconditions": [
+        "vite + chrome-devtools MCP",
+        "Tauri mock 注入"
+      ],
+      "stimulus": [
+        "点 root 节点",
+        "按 Tab"
+      ],
+      "oracle": {
+        "must": [
+          "document.querySelectorAll('me-tpc').length 增加 1",
+          "新 tpc 有 nodeObj"
+        ],
+        "must_not": [],
+        "time_boundary": "1s 内"
+      },
+      "controls": {
+        "data": "default content",
+        "dependencies": "vite + Tauri mock",
+        "time_randomness": "无"
+      },
+      "cleanup": "reload page",
+      "evidence": [
+        "DOM snapshot + console log"
+      ],
+      "automation": {
+        "adapter": "chrome-devtools-mcp",
+        "entrypoint": "e2e/tab-add-child.test.ts(待实施)",
+        "run_profiles": [
+          "scheduled",
+          "exploration"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "role": "终端用户",
+        "start_state": "画布有 root 节点",
+        "core_action_via_ui": true,
+        "tool": "chrome-devtools MCP",
+        "mode": "regression",
+        "locator_strategy": "selector me-tpc + press_key Tab",
+        "observations": [
+          "DOM 节点数",
+          "console 错误"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L3-002",
+      "title": "点附件图标 + 选文件 + 画布显示缩略图",
+      "source_ids": [
+        "F-004"
+      ],
+      "proposition_ids": [
+        "VP-MCP-WRITE-REAL"
+      ],
+      "obligation_ids": [
+        "OB-013"
+      ],
+      "layer": "L3",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "normal",
+      "owner": "qa-team",
+      "lifecycle_status": "draft",
+      "intent": "证明附件 UI 端到端(类型色 + 角标 + 缩略图)",
+      "preconditions": [
+        "vite + 选中节点 + 已保存 filePath"
+      ],
+      "stimulus": [
+        "点 PDF 附件图标",
+        "选 mock 文件"
+      ],
+      "oracle": {
+        "must": [
+          "画布显示 .attached-render 元素",
+          "扩展名角标显示 '.PDF'",
+          "左边框红色(pdf 类型色)"
+        ],
+        "must_not": [],
+        "time_boundary": "1s 内"
+      },
+      "controls": {
+        "data": "mock 文件",
+        "dependencies": "vite + Tauri mock",
+        "time_randomness": "无"
+      },
+      "cleanup": "reload",
+      "evidence": [
+        "截图 + DOM snapshot"
+      ],
+      "automation": {
+        "adapter": "chrome-devtools-mcp",
+        "entrypoint": "e2e/attach-file.test.ts(待实施)",
+        "run_profiles": [
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "role": "终端用户",
+        "start_state": "节点选中,filePath 存在",
+        "core_action_via_ui": true,
+        "tool": "chrome-devtools MCP",
+        "mode": "regression",
+        "locator_strategy": "title='PDF' 按钮 + file input",
+        "observations": [
+          ".attached-render",
+          ".attached-ext-tag",
+          ".attached-render 边框颜色"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L3-003",
+      "title": "多窗口子窗口关闭按钮 → Destroyed",
+      "source_ids": [
+        "F-006"
+      ],
+      "proposition_ids": [
+        "VP-MULTIWINDOW-CLOSE"
+      ],
+      "obligation_ids": [
+        "OB-015"
+      ],
+      "layer": "L3",
+      "responsibility": "reinforcement",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "qa-team",
+      "lifecycle_status": "draft",
+      "intent": "证明真实用户操作下子窗口关闭不死循环",
+      "preconditions": [
+        "打开 2 个窗口(main + doc-1)"
+      ],
+      "stimulus": [
+        "点 doc-1 关闭按钮"
+      ],
+      "oracle": {
+        "must": [
+          "doc-1 窗口消失",
+          "CloseRequested log 1-2 次",
+          "Destroyed log 出现"
+        ],
+        "must_not": [
+          "CPU 100%"
+        ],
+        "time_boundary": "5s 内"
+      },
+      "controls": {
+        "data": "dev app",
+        "dependencies": "Tauri dev",
+        "time_randomness": "无"
+      },
+      "cleanup": "无",
+      "evidence": [
+        "Rust stdout + 窗口列表"
+      ],
+      "automation": {
+        "adapter": "manual+shell",
+        "entrypoint": "手动点击 + ps/lsof 验证",
+        "run_profiles": [
+          "release",
+          "post_deploy"
+        ],
+        "deterministic": false
+      },
+      "layer_detail": {
+        "role": "终端用户",
+        "start_state": "两个窗口都可见",
+        "core_action_via_ui": true,
+        "tool": "macOS 窗口关闭按钮",
+        "mode": "regression",
+        "locator_strategy": "窗口红点关闭按钮",
+        "observations": [
+          "窗口列表",
+          "Rust stdout"
+        ]
+      }
+    },
+    {
+      "case_id": "TC-L3-004",
+      "title": "LLM 持锁时 banner 显示 + 点接管 → banner 消失 + canvas 解锁",
+      "source_ids": [
+        "F-007"
+      ],
+      "proposition_ids": [
+        "VP-TAKEOVER"
+      ],
+      "obligation_ids": [
+        "OB-016"
+      ],
+      "layer": "L3",
+      "responsibility": "primary",
+      "category": "positive",
+      "priority": "critical",
+      "owner": "qa-team",
+      "lifecycle_status": "automated",
+      "intent": "证明接管 UI 端到端(不只 invoke 命令)",
+      "preconditions": [
+        "vite + store 注入 llmSession"
+      ],
+      "stimulus": [
+        "store.setLlmSession({session, reason:'acquired'})",
+        "点接管按钮"
+      ],
+      "oracle": {
+        "must": [
+          "banner 显示 'E2E Test 正在编辑'",
+          "canvas 有 llm-active class",
+          "点接管后 banner 消失",
+          "canvas 解锁"
+        ],
+        "must_not": [
+          "banner 持续显示"
+        ],
+        "time_boundary": "500ms 内"
+      },
+      "controls": {
+        "data": "mock session",
+        "dependencies": "vite + Tauri mock",
+        "time_randomness": "无"
+      },
+      "cleanup": "reload",
+      "evidence": [
+        "截图 + DOM snapshot + console"
+      ],
+      "automation": {
+        "adapter": "chrome-devtools-mcp",
+        "entrypoint": "e2e/llm-takeover.test.ts(已部分实施)",
+        "run_profiles": [
+          "local",
+          "scheduled"
+        ],
+        "deterministic": true
+      },
+      "layer_detail": {
+        "role": "终端用户",
+        "start_state": "store.llmSession=null",
+        "core_action_via_ui": true,
+        "tool": "chrome-devtools MCP",
+        "mode": "regression",
+        "locator_strategy": ".llm-banner-takeover 按钮",
+        "observations": [
+          ".llm-banner",
+          ".llm-active class",
+          "console [banner] log"
+        ]
+      }
+    }
+  ],
+  "coverage_summary": {
+    "covered_obligation_ids": [
+      "OB-001",
+      "OB-002",
+      "OB-003",
+      "OB-004",
+      "OB-005",
+      "OB-006",
+      "OB-007",
+      "OB-008",
+      "OB-009",
+      "OB-010",
+      "OB-011",
+      "OB-012",
+      "OB-013",
+      "OB-014",
+      "OB-015",
+      "OB-016",
+      "OB-017",
+      "OB-018"
+    ],
+    "conditional_obligation_ids": [
+      "OB-019"
+    ],
+    "blocked_obligation_ids": [],
+    "uncovered_items": [
+      {
+        "description": "U-002 TTL task app 退出清理",
+        "reason": "无入口测试,需要进程级监控",
+        "owner": "rust-team"
+      },
+      {
+        "description": "U-003 同文件多窗口冲突",
+        "reason": "无锁文件机制,需要产品决策",
+        "owner": "product"
+      },
+      {
+        "description": "U-001 reshapeNode 对 priority/icons/style 影响",
+        "reason": "需要进一步 PoC",
+        "owner": "frontend-team"
+      }
+    ],
+    "stop_decision": "conditional_complete",
+    "rationale": "19 个覆盖义务中 18 个 designed,1 个 conditional(OB-019 需产品决策)。3 个关键未知 U-001/U-002/U-003 显式标记,责任人明确。所有 critical 风险链(MCP 写真实生效/互斥/接管/附件持久/自动保存 race/多窗口关闭)都有用例。L3 4 个用例通过 chrome-devtools MCP + 手动组合覆盖真实操作。"
+  }
+}
