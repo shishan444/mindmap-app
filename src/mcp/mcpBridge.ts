@@ -10,6 +10,7 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
+import { isTauri } from "../utils/tauriEnv";
 
 const DEBOUNCE_MS = 1000;
 
@@ -21,6 +22,7 @@ interface McpEditState {
 
 export function useMcpBridge() {
   useEffect(() => {
+    if (!isTauri()) return;
     let timer: number | undefined;
     let lastSig = "";
 

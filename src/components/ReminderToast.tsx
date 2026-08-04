@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
+import { isTauri } from "../utils/tauriEnv";
 import type { Reminder } from "../types";
 import "./ReminderToast.css";
 
@@ -17,6 +18,7 @@ export default function ReminderToast() {
   useEffect(() => {
     let unlistenFn: (() => void) | undefined;
     (async () => {
+      if (!isTauri()) return;
       try {
         unlistenFn = await listen<Reminder>("reminder-triggered", (event) => {
           // 多窗口模式:只显示归属当前窗口的 reminder

@@ -21,6 +21,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+// 浏览器模式(无 Tauri 运行时)下,跳过 invoke,日志仅打印到 console
+function hasTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof (window as any).__TAURI_INTERNALS__ !== "undefined"
+  );
+}
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogCategory =
   | "system"
@@ -120,7 +128,7 @@ export function log(
   }
 
   // 异步写文件（fire-and-forget）
-  if (!invokeAvailable) return;
+  if (!invokeAvailable || !hasTauriRuntime()) return;
   invoke("log_event", { entry }).catch((e) => {
     // invoke 失败（非 Tauri 环境），停止后续尝试
     invokeAvailable = false;

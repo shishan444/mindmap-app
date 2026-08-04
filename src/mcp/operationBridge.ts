@@ -192,6 +192,13 @@ export async function initLlmBridge(): Promise<void> {
   if (bridgeStarted) return;
   bridgeStarted = true;
 
+  // 浏览器模式(无 Tauri 运行时)静默跳过
+  const { isTauri } = await import("../utils/tauriEnv");
+  if (!isTauri()) {
+    console.log("[llm-bridge] 非 Tauri 环境,跳过 listen 注册");
+    return;
+  }
+
   console.log("[llm-bridge] initLlmBridge 启动,注册 listen...");
 
   try {

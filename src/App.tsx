@@ -21,11 +21,60 @@ import {
   logUserAction,
   logState,
 } from "./utils/devLogger";
+import { isTauri, warnBrowserModeOnce } from "./utils/tauriEnv";
 import type { Config, Content, Priority, Reminder } from "./types";
 import "./App.css";
 
 // 模块加载时初始化 dev 日志
 initDevLogger();
+warnBrowserModeOnce();
+
+function makeBrowserDefaultContent(): Content {
+  const id =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `root-${Date.now()}`;
+  return {
+    version: "1.0",
+    root: { id, topic: "中心主题" },
+    canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
+  };
+}
+
+function makeBrowserDefaultConfig(): Config {
+  return {
+    version: "1.0",
+    window_state: {
+      x: 100,
+      y: 100,
+      width: 1280,
+      height: 800,
+      is_maximized: false,
+      sidebar_width: 320,
+      sidebar_collapsed: false,
+      active_tab: "properties",
+    },
+    ui: {
+      theme: "light",
+      language: "zh-CN",
+      font_size: 14,
+      show_minimap: true,
+      show_toolbar: true,
+    },
+    auto_save_interval_sec: 2,
+    recent_files_max: 20,
+    reminder: {
+      sound_enabled: true,
+      sound_file: "",
+      default_priority: "P2",
+      snooze_minutes: 5,
+      show_modal_when_background: true,
+      system_notification_enabled: true,
+    },
+    export: { png_scale: 2, markdown_indent: "  " },
+    mcp: { enabled: false, port: 23456, default_ttl_sec: 300 },
+  };
+}
 
 function App() {
   const [booted, setBooted] = useState(false);
@@ -98,6 +147,14 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
+        // 浏览器模式(无 Tauri 运行时):提供默认 Config + 默认空白文档,
+        // 让 UI 完整可用(画布可编辑、侧栏可见)
+        if (!isTauri()) {
+          setConfig(makeBrowserDefaultConfig());
+          setContent(makeBrowserDefaultContent());
+          setFilePath(null);
+          return;
+        }
         const cfg = await invoke<Config>("get_config");
         setConfig(cfg);
 
@@ -172,6 +229,7 @@ function App() {
   // 但**只在主窗口启动 60s 定时器**(避免 N 窗口 N 个定时器并发请求)
   useEffect(() => {
     let timer: number | undefined;
+    if (!isTauri()) return;
     const load = async () => {
       try {
         const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
@@ -199,6 +257,7 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     (async () => {
+      if (!isTauri()) return;
       try {
         const win = getCurrentWindow();
         const label = win.label;

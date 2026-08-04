@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   initDevLogger,
@@ -18,6 +18,12 @@ beforeEach(() => {
   setDevLoggerEnabled(false);
   vi.mocked(invoke).mockClear();
   vi.mocked(invoke).mockResolvedValue(null as any);
+  // devLogger 仅在 Tauri 运行时内调 invoke;jsdom 测试环境需模拟
+  (window as any).__TAURI_INTERNALS__ = { invoke: true };
+});
+
+afterEach(() => {
+  delete (window as any).__TAURI_INTERNALS__;
 });
 
 describe("FE-LOG: 启用/禁用控制", () => {
