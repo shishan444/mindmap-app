@@ -29,53 +29,6 @@ import "./App.css";
 initDevLogger();
 warnBrowserModeOnce();
 
-function makeBrowserDefaultContent(): Content {
-  const id =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `root-${Date.now()}`;
-  return {
-    version: "1.0",
-    root: { id, topic: "中心主题" },
-    canvas_state: { zoom: 1, pan_x: 0, pan_y: 0 },
-  };
-}
-
-function makeBrowserDefaultConfig(): Config {
-  return {
-    version: "1.0",
-    window_state: {
-      x: 100,
-      y: 100,
-      width: 1280,
-      height: 800,
-      is_maximized: false,
-      sidebar_width: 320,
-      sidebar_collapsed: false,
-      active_tab: "properties",
-    },
-    ui: {
-      theme: "light",
-      language: "zh-CN",
-      font_size: 14,
-      show_minimap: true,
-      show_toolbar: true,
-    },
-    auto_save_interval_sec: 2,
-    recent_files_max: 20,
-    reminder: {
-      sound_enabled: true,
-      sound_file: "",
-      default_priority: "P2",
-      snooze_minutes: 5,
-      show_modal_when_background: true,
-      system_notification_enabled: true,
-    },
-    export: { png_scale: 2, markdown_indent: "  " },
-    mcp: { enabled: false, port: 23456, default_ttl_sec: 300 },
-  };
-}
-
 function App() {
   const [booted, setBooted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,12 +100,9 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        // 浏览器模式(无 Tauri 运行时):提供默认 Config + 默认空白文档,
-        // 让 UI 完整可用(画布可编辑、侧栏可见)
+        // 浏览器模式(无 Tauri 运行时):跳过所有 IPC,让 UI 显式失败(画布空白)
+        // 友好提示已在 warnBrowserModeOnce() 给出
         if (!isTauri()) {
-          setConfig(makeBrowserDefaultConfig());
-          setContent(makeBrowserDefaultContent());
-          setFilePath(null);
           return;
         }
         const cfg = await invoke<Config>("get_config");
