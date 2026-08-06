@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "ran_at": "2026-08-04T05:23:00Z",
+  "target_version": "0.2.3",
+  "environment": {
+    "platform": "darwin 25.5.0 (macOS 26 Tahoe)",
+    "node": "v22.x",
+    "rust": "1.97.0",
+    "tauri": "2.x",
+    "mind_elixir": "5.14"
+  },
+  "summary": {
+    "total_pass": 608,
+    "total_fail": 0,
+    "total_error": 0,
+    "total_skipped": 0,
+    "total_quarantined": 0,
+    "fe_pass": 320,
+    "fe_files": 23,
+    "rust_lib_pass": 271,
+    "rust_integration_pass": 17,
+    "rust_main_pass": 0,
+    "doc_tests_ignored": 1,
+    "typecheck_pass": true,
+    "build_pass": true,
+    "build_time_ms": 744
+  },
+  "by_layer": {
+    "L1": {
+      "fe_unit": 304,
+      "rust_unit": 271,
+      "note": "L1 充分覆盖 OB-001..OB-015, OB-022..OB-025"
+    },
+    "L2": {
+      "rust_integration": "部分(scripts/verify-mcp-live.sh + cargo test --lib 整合)",
+      "missing": [
+        "OB-018 TTL task app 退出清理(无 cleanup hook)",
+        "OB-019 同文件多窗口锁(无锁文件机制)",
+        "OB-020 多窗口后台任务去重(需 Tauri App 启动多窗口,L3 验证)"
+      ]
+    },
+    "L3": {
+      "automated": 0,
+      "manual_required": [
+        "TC-L3-001 Tab 加子节点 DOM",
+        "TC-L3-002 附件图标点击",
+        "TC-L3-003 多窗口关闭按钮(浏览器模式可用 chrome-devtools MCP,真机需手动)",
+        "TC-L3-004 接管按钮交互",
+        "TC-L3-005 Cmd+Z 撤销"
+      ]
+    }
+  },
+  "by_ob": {
+    "OB-001": { "status": "PASS", "primary": ["src-tauri/src/mcp/protocol.rs:28 tests"] },
+    "OB-002": { "status": "PASS", "primary": ["src-tauri/src/mcp/editor_mode.rs:21 tests"] },
+    "OB-003": { "status": "PASS", "primary": ["editor_mode.rs TTL", "session.rs TTL loop"] },
+    "OB-004": { "status": "PASS", "primary": ["tools_readonly.rs:24", "tools_session.rs:14", "tools_write.rs:18"] },
+    "OB-005": { "status": "PARTIAL", "primary": ["scripts/verify-mcp-live.sh"], "missing": ["move_node", "attach_file", "reshapeNode 绕过 L2 专项"] },
+    "OB-006": { "status": "PASS", "primary": ["editor_mode.rs concurrent_acquire"] },
+    "OB-007": { "status": "PASS", "primary": ["useAutoSave.test.ts:11 (含 FE-AUTOSAVE-10/11 race regression)"] },
+    "OB-008": { "status": "PASS", "primary": ["mmap.rs:9"] },
+    "OB-009": { "status": "PASS", "primary": ["mindElixirAdapter.test.ts:34"] },
+    "OB-010": { "status": "PASS", "primary": ["mindElixirAdapter.test.ts attached_file"] },
+    "OB-011": { "status": "PASS_L1_GAP_L3", "primary": ["nodeActions.test.ts:36"], "missing": ["L3 自动化"] },
+    "OB-012": { "status": "PASS", "primary": ["TabProperties.test.tsx:15"] },
+    "OB-013": { "status": "PASS", "primary": ["reminderState.test.ts:13", "reminder_scheduler.rs:21 (★Bug1 regression)"] },
+    "OB-014": { "status": "PARTIAL", "primary": ["类型识别部分覆盖"], "missing": ["8 类型完整 + 类型色 DOM"] },
+    "OB-015": { "status": "PASS", "primary": ["markdown.rs:17", "opml.rs:16", "freemind.rs:4"] },
+    "OB-016": { "status": "PASS_L1", "primary": ["useSubWindowCloseGuard.test.ts:6 (★新增)"], "note": "L3 真机仍需 chrome-devtools 验证" },
+    "OB-017": { "status": "PARTIAL", "primary": ["App.mcp-canvas-lock.test.tsx:2", "LlmSessionBanner.test.tsx:9 (★+3 ✕ 关闭回归)"], "missing": ["L3 自动化"] },
+    "OB-018": { "status": "BLOCKED", "reason": "无 cleanup hook,需评估 tokio runtime drop 行为" },
+    "OB-019": { "status": "BLOCKED", "reason": "无锁文件机制,显式接受为已知限制" },
+    "OB-020": { "status": "BLOCKED_L2", "primary": [], "note": "需 Tauri App 多窗口 L3 验证" },
+    "OB-021": { "status": "PARTIAL", "primary": ["state.rs filter_test_reminders:3"], "missing": ["误清理真实 reminder 风险 case"] },
+    "OB-022": { "status": "PASS", "primary": ["tauriEnv.test.ts:9 (★新增)", "useSubWindowCloseGuard.test.ts 浏览器模式 case"] },
+    "OB-023": { "status": "PASS", "primary": ["store.test.ts:42 (含 syncToMindNodeObj)"] },
+    "OB-024": { "status": "PASS", "primary": ["operationBridge.test.ts:6 zundo pause/resume (★新增)"] },
+    "OB-025": { "status": "PASS", "primary": ["audit_log.rs:9 (★新增 6 + 修复并发 bug)"] },
+    "OB-026": {
+      "status": "PASS",
+      "primary": [
+        "Bug1: reminder_scheduler.rs:21",
+        "Bug2-a: LlmSessionBanner.test.tsx:3 ✕ 关闭 + 淡出",
+        "Bug2-b: LlmOperationHistory.test.tsx:5 翻页 + 展开 + ✕ 关闭",
+        "Bug3: Toolbar.test.tsx:6 最近文件下拉 + dirty confirm"
+      ]
+    }
+  },
+  "bugs_found_during_rebuild": [
+    {
+      "severity": "P1",
+      "ob": "OB-025",
+      "title": "AuditLogger 并发写丢失",
+      "root_cause": "Mutex<PathBuf> 只锁路径获取,文件 open + writeln 不在锁内,并发时 O_APPEND 多次 write 不原子导致丢行",
+      "fix": "改为 Mutex<()> 持锁覆盖整个 open + writeln 操作",
+      "evidence": "test_ob025_concurrent_emits_dont_corrupt_file 修复前 10→5,修复后 10→10",
+      "file": "src-tauri/src/mcp/audit_log.rs"
+    }
+  ],
+  "remaining_risks": [
+    "OB-018 TTL task app 退出清理(无 cleanup hook)",
+    "OB-019 同文件多窗口锁(无锁文件机制)",
+    "OB-020 多窗口后台任务去重(需 L3 真机验证)",
+    "macOS 26 Tahoe WKWebView 跟 Chrome 行为不完全一致"
+  ]
+}
