@@ -340,10 +340,9 @@ fn on_tray_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 .into_iter()
                 .filter(|(_, w)| w.is_visible().unwrap_or(false));
             let mut shown = false;
-            for (_, w) in visible {
+            if let Some((_, w)) = visible.into_iter().next() {
                 let _ = w.set_focus();
                 shown = true;
-                break;
             }
             if !shown {
                 if let Some(main) = app.get_webview_window("main") {
