@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { useMindMapStore } from "../store";
 import LlmOperationHistory from "./LlmOperationHistory";
 
@@ -106,5 +106,96 @@ describe("FE-LLM-HISTORY", () => {
     });
     render(<LlmOperationHistory />);
     expect(screen.getByText("n1 → n2")).toBeInTheDocument();
+  });
+
+  // === OB-026 Bug2-b 回归(7022507):✕ 关闭 + 默认 3 条 + 全部展开 + 翻页 ===
+
+  it("★bug 回归★ 默认折叠显示最近 3 条(超过 3 时显示全部(N)▾)", () => {
+    const ops = Array.from({ length: 5 }, (_, i) => ({
+      op_id: `op${i}`,
+      op_type: "create_node",
+      payload: { topic: `T${i}` },
+      received_at_ms: Date.now() - i * 1000,
+    }));
+    useMindMapStore.setState({ llmOperations: ops });
+    render(<LlmOperationHistory />);
+    // 默认显示 3 条
+    expect(screen.getAllByText(/T\d/).length).toBe(3);
+    // 显示"全部(5) ▾"
+    expect(screen.getByText(/全部\(5\)/)).toBeInTheDocument();
+  });
+
+  it("★bug 回归★ 点✕ 关闭按钮隐藏整个历史面板", () => {
+    useMindMapStore.setState({
+      llmOperations: [
+        { op_id: "1", op_type: "create_node", payload: { topic: "A" }, received_at_ms: Date.now() },
+      ],
+    });
+    const { container } = render(<LlmOperationHistory />);
+    expect(container.firstChild).not.toBeNull();
+    fireEvent.click(screen.getByTitle("关闭操作历史"));
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("★bug 回归★ 点全部(N)▾ 展开后显示翻页(>10 条时)", () => {
+    const ops = Array.from({ length: 15 }, (_, i) => ({
+      op_id: `op${i}`,
+      op_type: "create_node",
+      payload: { topic: `T${i}` },
+      received_at_ms: Date.now() - i * 1000,
+    }));
+    useMindMapStore.setState({ llmOperations: ops });
+    render(<LlmOperationHistory />);
+    // 点展开
+    fireEvent.click(screen.getByText(/全部\(15\)/));
+    // 展开后显示"收起 ▴" + 翻页器(pageSize=10,totalPages=2)
+    expect(screen.getByText(/收起/)).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+    // 第一页应显示 10 条
+    expect(screen.getAllByText(/T\d/).length).toBe(10);
+  });
+
+  it("★bug 回归★ 翻页 ‹ › 切换页面 + 边界 disable", () => {
+    const ops = Array.from({ length: 25 }, (_, i) => ({
+      op_id: `op${i}`,
+      op_type: "create_node",
+      payload: { topic: `T${i}` },
+      received_at_ms: Date.now() - i * 1000,
+    }));
+    useMindMapStore.setState({ llmOperations: ops });
+    render(<LlmOperationHistory />);
+    fireEvent.click(screen.getByText(/全部\(25\)/));
+    // 25 条 / 10 每页 = 3 页
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    const prevBtn = screen.getByText("‹");
+    const nextBtn = screen.getByText("›");
+    // 第一页 ‹ disabled
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).not.toBeDisabled();
+    // 点 › 到第二页
+    fireEvent.click(nextBtn);
+    expect(screen.getByText("2/3")).toBeInTheDocument();
+    expect(prevBtn).not.toBeDisabled();
+    // 点 › 到第三页(最后)
+    fireEvent.click(nextBtn);
+    expect(screen.getByText("3/3")).toBeInTheDocument();
+    expect(nextBtn).toBeDisabled();
+  });
+
+  it("★bug 回归★ 展开后点收起 ▴ 回到折叠态(3 条)", () => {
+    const ops = Array.from({ length: 8 }, (_, i) => ({
+      op_id: `op${i}`,
+      op_type: "create_node",
+      payload: { topic: `T${i}` },
+      received_at_ms: Date.now() - i * 1000,
+    }));
+    useMindMapStore.setState({ llmOperations: ops });
+    render(<LlmOperationHistory />);
+    fireEvent.click(screen.getByText(/全部\(8\)/));
+    expect(screen.getByText(/收起/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/收起/));
+    // 回到折叠:3 条 + "全部(8)" 按钮
+    expect(screen.getAllByText(/T\d/).length).toBe(3);
+    expect(screen.getByText(/全部\(8\)/)).toBeInTheDocument();
   });
 });
