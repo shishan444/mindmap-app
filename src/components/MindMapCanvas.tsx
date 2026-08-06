@@ -13,7 +13,7 @@ import {
   getImageFromClipboard,
 } from "../utils/imageEmbed";
 import { computeNodeReminderState } from "../utils/reminderState";
-import { computeDropZone, buildSvgLine } from "../utils/dragDrop";
+import { computeDropZone, computePlaceholderRectFromActual, computeSiblingShift, buildConnectionLinePath, executeDrop, type DropZone } from "../utils/dragDrop";
 import "./MindMapCanvas.css";
 
 interface Props {
@@ -645,25 +645,24 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
 
-      // === Fallback 拖动改层级(方案 C:SVG 虚线 + 三分色 + 阈值 0.15)===
+      // === Fallback 拖动改层级(方案 N:source 高亮 + 占位框 + 兄弟让位 + 阈值 0.15)===
       // mind-elixir 5.14 内置 drag 不工作（Nt noop），但 moveNode API 可用。
       // 自己绑 mousedown/mousemove/mouseup 实现吸附式拖动。
-      // 方案 C:阈值改为 0.15/0.85(兄弟排序更宽容)+ 源到目标 SVG 直线虚线
-      //        + before/after 蓝色实线间隙条 + inside 橙色加粗边框。
+      // 方案 N:移除 ghost 浮窗 + source 加亮色边框/发光(替代 opacity)+ 占位框
+      //        + 兄弟让位 transform。让用户看清"选中的是哪个"+"会落在哪"+"兄弟让位"。
       let dragState: {
         source: HTMLElement;
         startX: number;
         startY: number;
         isDragging: boolean;
-        ghost: HTMLElement | null;
+        // ★ 方案 R:source DOM 不动,用 placeholder overlay 显示预览位置
         overlay: {
+          placeholder: HTMLDivElement;
           svg: SVGSVGElement;
           line: SVGPathElement;
-          gapBefore: HTMLDivElement;
-          gapAfter: HTMLDivElement;
         } | null;
         currentTarget: HTMLElement | null;
-        currentZone: import("../utils/dragDrop").DropZone | null;
+        currentZone: DropZone | null;
       } | null = null;
 
       const isDescendant = (node: any, targetId: string): boolean => {
@@ -676,122 +675,178 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         return false;
       };
 
-      // 收集节点及其所有子节点的文字（用于 ghost 预览）
-      const collectSubtreeTexts = (nodeObj: any, depth = 0): string[] => {
-        const texts = [`${"  ".repeat(depth)}${nodeObj.topic || "?"}`];
-        for (const c of nodeObj.children ?? []) {
-          texts.push(...collectSubtreeTexts(c, depth + 1));
-        }
-        return texts;
-      };
-
-      const createGhost = (source: HTMLElement): HTMLElement => {
-        const nodeObj = (source as any).nodeObj;
-        const texts = nodeObj ? collectSubtreeTexts(nodeObj) : [source.textContent || "?"];
-
-        const ghost = document.createElement("div");
-        ghost.className = "drag-ghost";
-        ghost.innerHTML = texts
-          .map((t, i) => `<div style="padding-left:${i === 0 ? 0 : 12}px;${i === 0 ? "font-weight:600;" : "opacity:0.7;"}">${t}</div>`)
-          .join("");
-        ghost.style.cssText =
-          "position:fixed;z-index:9999;pointer-events:none;" +
-          "background:rgba(255,255,255,0.95);border:1px solid #4dc4ff;border-radius:6px;" +
-          "padding:6px 10px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" +
-          "max-width:200px;overflow:hidden;white-space:nowrap;";
-        document.body.appendChild(ghost);
-        return ghost;
-      };
-
-      const removeGhost = () => {
-        const g = document.querySelector(".drag-ghost");
-        if (g) g.remove();
-      };
-
-      // === SVG 虚线 overlay:从源中心到目标中心的直线 ===
+      // === 方案 R:source 不动 + placeholder 占位 + sibling translateY + SVG 连接虚线 ===
+      // 关键不变量:source DOM 位置不变(留原位高亮),所有视觉预览通过独立 overlay 元素。
+      // 这符合 HTML5 drag-and-drop + 主流库(dnd-kit/react-dnd)的设计原则。
+      // 解决了方案 Q 的 5 处病灶(反馈循环 / 自指 / 没选中 / 落点不准 / transition 冲突)。
       const createDragOverlay = () => {
+        // placeholder 占位框(B 的化身:蓝色虚线方框 + 同 B 尺寸)
+        const placeholder = document.createElement("div");
+        placeholder.className = "drag-placeholder-r";
+        placeholder.style.display = "none";
+        inner.appendChild(placeholder);
+
+        // SVG 连接虚线 overlay(A → placeholder)
         const svgNS = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(svgNS, "svg") as SVGSVGElement;
-        svg.classList.add("drag-overlay");
-
-        const gapBefore = document.createElement("div");
-        gapBefore.className = "drag-gap drag-gap-before";
-        const gapAfter = document.createElement("div");
-        gapAfter.className = "drag-gap drag-gap-after";
-
+        svg.classList.add("drag-connection-svg");
         const line = document.createElementNS(svgNS, "path") as SVGPathElement;
         line.setAttribute("stroke", "#4dc4ff");
         line.setAttribute("stroke-width", "2");
         line.setAttribute("stroke-dasharray", "6 4");
         line.setAttribute("fill", "none");
-        line.setAttribute("opacity", "0.7");
+        line.setAttribute("opacity", "0.85");
+        line.setAttribute("d", "");
         svg.appendChild(line);
-
         inner.appendChild(svg);
-        inner.appendChild(gapBefore);
-        inner.appendChild(gapAfter);
 
-        return { svg, line, gapBefore, gapAfter };
+        // 淡化 mind-elixir 内置连接线(避免旧实线 + 新虚线并存)
+        inner.classList.add("dragging");
+        return { placeholder, svg, line };
+      };
+
+      // 找 source 的父节点 A(用于绘制 A→source 连接虚线)
+      // DOM 结构:me-wrapper > me-parent(第一个,父节点) > me-tpc(父节点本身)
+      const findParentTpc = (source: HTMLElement): HTMLElement | null => {
+        const wrapper = source.closest("me-wrapper");
+        if (!wrapper) return null;
+        const parentWrapper = wrapper.querySelector(":scope > me-parent");
+        return (parentWrapper?.querySelector("me-tpc") as HTMLElement) || null;
+      };
+
+      // 找受影响的兄弟节点(source 自身和 target 不在结果中,根据 zone 决定 target 是否包含)
+      const findShiftedSiblings = (
+        source: HTMLElement,
+        target: HTMLElement,
+        zone: DropZone,
+      ): HTMLElement[] => {
+        if (zone === "inside") return [];
+        const parent = target.parentElement;
+        if (!parent) return [];
+        const siblings = Array.from(parent.children) as HTMLElement[];
+        const targetIdx = siblings.indexOf(target);
+        if (targetIdx < 0) return [];
+
+        const result: HTMLElement[] = [];
+        for (let i = 0; i < siblings.length; i++) {
+          if (siblings[i] === source) continue; // source 自身 transform 移走,不让位
+          if (i === targetIdx) {
+            if (zone === "before") result.push(siblings[i]);
+            continue;
+          }
+          if (zone === "before" && i >= targetIdx) {
+            result.push(siblings[i]);
+          } else if (zone === "after" && i > targetIdx) {
+            result.push(siblings[i]);
+          }
+        }
+        return result;
+      };
+
+      const clearSiblingShift = () => {
+        inner.querySelectorAll(".drag-sibling-shift").forEach((el) => {
+          const e = el as HTMLElement;
+          e.classList.remove("drag-sibling-shift");
+          e.style.transform = "";
+        });
       };
 
       const removeDragOverlay = () => {
-        inner.querySelectorAll(".drag-overlay, .drag-gap").forEach((el) => el.remove());
-        inner.querySelectorAll(".drag-over, .drag-over-inside").forEach((el) => {
-          el.classList.remove("drag-over", "drag-over-inside");
+        inner.querySelectorAll(".drag-connection-svg, .drag-placeholder-r").forEach((el) => el.remove());
+        clearSiblingShift();
+        inner.classList.remove("dragging");
+        inner.querySelectorAll(".drag-source").forEach((el) => {
+          (el as HTMLElement).classList.remove("drag-source");
         });
       };
 
-      // 根据 dragState.currentTarget / currentZone 更新所有视觉指示器
       const updateDragOverlay = () => {
         if (!dragState || !dragState.overlay) return;
-        const { line, gapBefore, gapAfter } = dragState.overlay;
+        const { placeholder, line } = dragState.overlay;
 
-        // 清除上一帧的指示器
-        inner.querySelectorAll(".drag-over, .drag-over-inside").forEach((el) => {
-          el.classList.remove("drag-over", "drag-over-inside");
-        });
-        gapBefore.style.display = "none";
-        gapAfter.style.display = "none";
+        // 清除上一帧 sibling shift(source 不动,不清 source transform)
+        clearSiblingShift();
 
         const target = dragState.currentTarget;
         const zone = dragState.currentZone;
         if (!target || !zone) {
+          placeholder.style.display = "none";
           line.setAttribute("d", "");
           return;
         }
 
-        // SVG 坐标相对于 inner(overlay 是 inner 的子元素)
+        // ★ 关键:source DOM 不动,getBoundingClientRect 始终有效(无反馈循环)
         const srcRect = dragState.source.getBoundingClientRect();
-        const dstRect = target.getBoundingClientRect();
+        const tgtRect = target.getBoundingClientRect();
         const innerRect = inner.getBoundingClientRect();
-        const srcLocal = {
-          left: srcRect.left - innerRect.left,
-          top: srcRect.top - innerRect.top,
+        const srcRectArg = {
+          left: srcRect.left,
+          top: srcRect.top,
           width: srcRect.width,
           height: srcRect.height,
         };
-        const dstLocal = {
-          left: dstRect.left - innerRect.left,
-          top: dstRect.top - innerRect.top,
-          width: dstRect.width,
-          height: dstRect.height,
+        const tgtRectArg = {
+          left: tgtRect.left,
+          top: tgtRect.top,
+          width: tgtRect.width,
+          height: tgtRect.height,
         };
-        line.setAttribute("d", buildSvgLine(srcLocal, dstLocal));
 
-        if (zone === "inside") {
-          target.classList.add("drag-over-inside");
-        } else if (zone === "before") {
-          target.classList.add("drag-over");
-          gapBefore.style.display = "block";
-          gapBefore.style.left = `${dstRect.left - innerRect.left}px`;
-          gapBefore.style.top = `${dstRect.top - innerRect.top - 4}px`;
-          gapBefore.style.width = `${dstRect.width}px`;
-        } else {
-          target.classList.add("drag-over");
-          gapAfter.style.display = "block";
-          gapAfter.style.left = `${dstRect.left - innerRect.left}px`;
-          gapAfter.style.top = `${dstRect.top - innerRect.top + dstRect.height - 2}px`;
-          gapAfter.style.width = `${dstRect.width}px`;
+        // ★方案 R 修复(placeholder 位置不准)★
+        // 在 applySiblingShift **之前** 找 shiftedSiblings + 测量其原 rect,
+        // 然后用实测 rect 计算 placeholder(不用 target.bottom + gap 推算)。
+        // 决定性事实:mind-elixir --node-gap-y=10px,跟 DROP_GAP_PX=20 不一致,
+        // 推算会让 placeholder 跟 D 实际位置脱节。
+        const shiftedSiblings = findShiftedSiblings(dragState.source, target, zone);
+        const firstSiblingRect = shiftedSiblings.length > 0
+          ? shiftedSiblings[0].getBoundingClientRect()
+          : null;
+        const firstSiblingRectArg = firstSiblingRect
+          ? {
+              left: firstSiblingRect.left,
+              top: firstSiblingRect.top,
+              width: firstSiblingRect.width,
+              height: firstSiblingRect.height,
+            }
+          : null;
+
+        // placeholder 占据实测位置(before=target 当前位 / after=D 原位 / inside=target 右侧)
+        const preview = computePlaceholderRectFromActual(
+          srcRectArg,
+          tgtRectArg,
+          firstSiblingRectArg,
+          zone,
+        );
+        placeholder.style.display = "block";
+        placeholder.style.left = `${preview.left - innerRect.left}px`;
+        placeholder.style.top = `${preview.top - innerRect.top}px`;
+        placeholder.style.width = `${preview.width}px`;
+        placeholder.style.height = `${preview.height}px`;
+
+        // siblings 让位(translateY)— 在测量 rect 之后,顺序关键
+        const shiftDy = computeSiblingShift(srcRectArg, zone);
+        for (const el of shiftedSiblings) {
+          el.classList.add("drag-sibling-shift");
+          el.style.transform = `translateY(${shiftDy}px)`;
+        }
+
+        // 绘制 A→placeholder 连接虚线(父节点中心到 placeholder 中心)
+        const parentTpc = findParentTpc(dragState.source);
+        if (parentTpc) {
+          const parentRect = parentTpc.getBoundingClientRect();
+          const parentLocal = {
+            left: parentRect.left - innerRect.left,
+            top: parentRect.top - innerRect.top,
+            width: parentRect.width,
+            height: parentRect.height,
+          };
+          const previewLocal = {
+            left: preview.left - innerRect.left,
+            top: preview.top - innerRect.top,
+            width: preview.width,
+            height: preview.height,
+          };
+          line.setAttribute("d", buildConnectionLinePath(parentLocal, previewLocal));
         }
       };
 
@@ -800,17 +855,29 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
         if (tpc.closest("me-root")) return;
+        // ★ 根因修复:阻止浏览器原生 HTML5 drag-and-drop
+        // mind-elixir 5.14 的 me-tpc 内部 <img>/<a href> 默认 draggable=true,
+        // 即使 CSS 设了 pointer-events: none,浏览器仍会启动 HTML5 drag,
+        // 触发 drag image(亮点)+ WKWebView drag state(黑屏)。
+        // 必须在 mousedown 阶段 preventDefault 才能彻底阻止。
+        e.preventDefault();
         dragState = {
           source: tpc,
           startX: e.clientX,
           startY: e.clientY,
           isDragging: false,
-          ghost: null,
           overlay: null,
           currentTarget: null,
           currentZone: null,
         };
       };
+
+      // ★ 根因修复:双保险 — 即使 mousedown preventDefault 失败(例如落在文本上),
+      // dragstart 监听器仍能强制阻止 HTML5 drag
+      const onHtml5DragStart = (e: DragEvent) => {
+        e.preventDefault();
+      };
+      inner.addEventListener("dragstart", onHtml5DragStart as EventListener);
 
       onDragMove = (e: MouseEvent) => {
         if (!dragState) return;
@@ -819,21 +886,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!dragState.isDragging && Math.sqrt(dx * dx + dy * dy) > 5) {
           dragState.isDragging = true;
           inner.style.cursor = "grabbing";
-          dragState.ghost = createGhost(dragState.source);
+          // 方案 N:不加 ghost,source 自身高亮(.drag-source class)
+          dragState.source.classList.add("drag-source");
           dragState.overlay = createDragOverlay();
-          dragState.source.style.opacity = "0.3";
         }
         if (!dragState.isDragging) return;
 
-        if (dragState.ghost) {
-          dragState.ghost.style.left = e.clientX + 12 + "px";
-          dragState.ghost.style.top = e.clientY + 12 + "px";
-        }
-
-        if (dragState.ghost) dragState.ghost.style.display = "none";
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        if (dragState.ghost) dragState.ghost.style.display = "";
-
         const target = el ? getMeTpc(el as HTMLElement) : null;
         if (target && target !== dragState.source) {
           const sourceNodeObj = (dragState.source as any).nodeObj;
@@ -858,48 +917,46 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!dragState) return;
         inner.style.cursor = "";
 
-        dragState.source.style.opacity = "";
-        removeGhost();
+        const sourceTpc = dragState.source;
+        const sourceId = (sourceTpc as any).nodeObj?.id;
+        sourceTpc.classList.remove("drag-source");
         removeDragOverlay();
 
-        if (!dragState.isDragging) {
-          dragState = null;
-          return;
+        // ★ L2 业务流程协调:提取到 executeDrop 纯函数(可测试)
+        // 跨边界:dragState → moveNodeInContent(store splice)→ setContent + refresh
+        const state = useMindMapStore.getState();
+        const inst = instanceRef.current;
+        const result = executeDrop(
+          dragState as any,
+          {
+            getContent: () => state.content as any,
+            setContent: (c) => state.setContent(c as any),
+            refresh: (data) => {
+              try {
+                inst.refresh(data as any);
+              } catch (err) {
+                console.error("[drag] refresh 失败", err);
+              }
+            },
+            toMindElixirData: (c) => toMindElixirData(c as any) as any,
+          },
+        );
+        if (!result.ok && result.reason === "illegal_move") {
+          console.warn("[drag] moveNodeInContent 拒绝操作(可能是子孙循环或 root)");
         }
-
-        const target = dragState.currentTarget;
-        const zone = dragState.currentZone;
-
-        if (target && zone && target !== dragState.source) {
-          const inst = instanceRef.current;
-          try {
-            const sourceTpc = dragState.source;
-            const sourceNodeObj = (sourceTpc as any).nodeObj;
-            const targetId = (target as any).nodeObj?.id;
-            if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
-              dragState = null;
-              return;
+        // ★ 方案 R 修复病灶 3:refresh 后 inst 重建 DOM,source 引用失效,
+        // 用 sourceId 在新 DOM 中重新找 source 并 selectNode(修复"没选中")
+        if (result.ok && sourceId && inst) {
+          setTimeout(() => {
+            try {
+              const newSource = inst.findEle?.(sourceId);
+              if (newSource && inst.selectNode) {
+                inst.selectNode(newSource);
+              }
+            } catch (err) {
+              console.warn("[drag] selectNode 失败", err);
             }
-
-            const beforeNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
-
-            if (zone === "before") {
-              inst.moveNodeBefore([sourceTpc], target);
-            } else if (zone === "after") {
-              inst.moveNodeAfter([sourceTpc], target);
-            } else {
-              inst.moveNodeIn([sourceTpc], target);
-            }
-
-            const afterNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
-            if (beforeNodeData === afterNodeData) {
-              console.warn("[drag] moveNode 未改变 nodeData——操作无效");
-            }
-
-            setTimeout(() => { syncFromMindElixir(); }, 200);
-          } catch (err) {
-            console.error("[fallback drag] 失败", err);
-          }
+          }, 250); // 等 refresh 完成
         }
         dragState = null;
       };
@@ -907,6 +964,27 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("mousedown", onDragStart);
       document.addEventListener("mousemove", onDragMove);
       document.addEventListener("mouseup", onDragEnd);
+
+      // ★ 根因修复:给所有 me-tpc 子元素(img/a/text)设 draggable=false
+      // mind-elixir 5.14 没有这样做,导致 HTML5 drag 被触发
+      // 用 MutationObserver 监听后续新增节点(动态 addChild 时也要设)
+      const disableHtml5Drag = (root: Element | Document = document) => {
+        root.querySelectorAll?.("me-tpc img, me-tpc a, me-tpc span").forEach((el) => {
+          (el as HTMLElement).setAttribute("draggable", "false");
+        });
+      };
+      // 初始一遍(对已存在的节点)
+      setTimeout(() => disableHtml5Drag(inner), 100);
+      const dragMutationObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          m.addedNodes.forEach((node) => {
+            if (node.nodeType === 1) {
+              disableHtml5Drag(node as Element);
+            }
+          });
+        }
+      });
+      dragMutationObserver.observe(inner, { childList: true, subtree: true });
 
       // === 右键上下文菜单 ===
       let contextMenuEl: HTMLDivElement | null = null;

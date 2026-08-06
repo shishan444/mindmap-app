@@ -26,6 +26,13 @@
 .mind-elixir-inner me-parent > * {
   pointer-events: none;
 }
+/* ★ 根因修复:强制禁用 me-tpc 子元素的 HTML5 drag(防 drag image + drag state) */
+.mind-elixir-inner me-tpc img,
+.mind-elixir-inner me-tpc a,
+.mind-elixir-inner me-tpc span {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
 .mind-elixir-inner [contenteditable] {
   pointer-events: auto !important;
 }
@@ -72,57 +79,66 @@
   display: none !important;
 }
 
-/* 拖动时目标节点高亮(before/after 区,浅色提示) */
-.mind-elixir-inner .drag-over {
-  outline: 2px dashed #4dc4ff !important;
-  outline-offset: 4px;
-}
+/* === 方案 R 拖动视觉:source 不动 + placeholder 占位 + 纵向让位 + A→placeholder 连接虚线 === */
 
-/* 拖动时目标节点高亮(inside 区,橙色加粗边框 — 强提示"会成为子节点") */
-.mind-elixir-inner .drag-over-inside {
-  outline: 3px solid #f39c12 !important;
+/* 被拖动的 source 节点:留原位 + 蓝色边框高亮(不动 DOM,确保可 click/选中) */
+.mind-elixir-inner .drag-source {
+  outline: 2px solid #4dc4ff !important;
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 4px rgba(77, 196, 255, 0.25),
+    0 6px 18px rgba(77, 196, 255, 0.45) !important;
+  /* ★ 方案 R 关键:不用 transform,不用 transition transform,避免反馈循环 + 抖动 */
+  z-index: 5;
+  position: relative;
 }
 
-/* SVG 虚线 overlay:从源中心到目标中心的直线 */
-.mind-elixir-inner .drag-overlay {
+/* placeholder 占位框:B 的化身(蓝色虚线方框 + 同 source 尺寸) */
+.mind-elixir-inner .drag-placeholder-r {
+  position: absolute;
+  pointer-events: none;
+  z-index: 997;
+  border: 2px dashed #4dc4ff;
+  border-radius: 6px;
+  background: rgba(77, 196, 255, 0.10);
+  box-shadow: 0 0 0 1px rgba(77, 196, 255, 0.2), 0 2px 8px rgba(77, 196, 255, 0.18);
+  /* 短过渡让位置切换平滑(不会跟 60Hz mousemove 冲突,因为不是 transform) */
+  transition: left 0.08s ease-out, top 0.08s ease-out;
+}
+
+/* 兄弟节点纵向让位(translateY 由 JS 设置) */
+.mind-elixir-inner .drag-sibling-shift {
+  transition: transform 0.18s ease-out;
+  opacity: 0.75;
+}
+
+/* SVG 连接虚线 overlay(A→placeholder) */
+.mind-elixir-inner .drag-connection-svg {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 999;
+  z-index: 998;
   overflow: visible;
 }
 
-/* 蓝色实线间隙条(指示"会插在这个节点之前/之后") */
-.mind-elixir-inner .drag-gap {
-  position: absolute;
-  height: 3px;
-  background: #4dc4ff;
-  border-radius: 2px;
-  pointer-events: none;
-  z-index: 1000;
-  box-shadow: 0 0 6px rgba(77, 196, 255, 0.6);
+/* 拖动期间淡化 mind-elixir 内置连接线 */
+.mind-elixir-inner.dragging :where(svg, .lines, [class*="line"]) {
+  opacity: 0.2 !important;
+  transition: opacity 0.15s ease-out;
 }
-.mind-elixir-inner .drag-gap::before,
-.mind-elixir-inner .drag-gap::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  background: #4dc4ff;
-  border-radius: 50%;
-  transform: translateY(-50%);
+/* 但保留我们的连接虚线 */
+.mind-elixir-inner.dragging .drag-connection-svg {
+  opacity: 1 !important;
 }
-.mind-elixir-inner .drag-gap::before {
-  left: -4px;
-}
-.mind-elixir-inner .drag-gap::after {
-  right: -4px;
+
+/* 防御:drag-over 保留 */
+.mind-elixir-inner .drag-over {
+  outline: 2px dashed #4dc4ff !important;
+  outline-offset: 4px;
 }
 
 /* 右键上下文菜单 */
