@@ -72,10 +72,57 @@
   display: none !important;
 }
 
-/* 拖动时目标节点高亮 */
+/* 拖动时目标节点高亮(before/after 区,浅色提示) */
 .mind-elixir-inner .drag-over {
   outline: 2px dashed #4dc4ff !important;
   outline-offset: 4px;
+}
+
+/* 拖动时目标节点高亮(inside 区,橙色加粗边框 — 强提示"会成为子节点") */
+.mind-elixir-inner .drag-over-inside {
+  outline: 3px solid #f39c12 !important;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* SVG 虚线 overlay:从源中心到目标中心的直线 */
+.mind-elixir-inner .drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 999;
+  overflow: visible;
+}
+
+/* 蓝色实线间隙条(指示"会插在这个节点之前/之后") */
+.mind-elixir-inner .drag-gap {
+  position: absolute;
+  height: 3px;
+  background: #4dc4ff;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 0 6px rgba(77, 196, 255, 0.6);
+}
+.mind-elixir-inner .drag-gap::before,
+.mind-elixir-inner .drag-gap::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: #4dc4ff;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.mind-elixir-inner .drag-gap::before {
+  left: -4px;
+}
+.mind-elixir-inner .drag-gap::after {
+  right: -4px;
 }
 
 /* 右键上下文菜单 */

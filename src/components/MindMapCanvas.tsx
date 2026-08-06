@@ -13,6 +13,7 @@ import {
   getImageFromClipboard,
 } from "../utils/imageEmbed";
 import { computeNodeReminderState } from "../utils/reminderState";
+import { computeDropZone, buildSvgLine } from "../utils/dragDrop";
 import "./MindMapCanvas.css";
 
 interface Props {
@@ -644,15 +645,25 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
 
-      // === Fallback 拖动改层级 ===
+      // === Fallback 拖动改层级(方案 C:SVG 虚线 + 三分色 + 阈值 0.15)===
       // mind-elixir 5.14 内置 drag 不工作（Nt noop），但 moveNode API 可用。
       // 自己绑 mousedown/mousemove/mouseup 实现吸附式拖动。
+      // 方案 C:阈值改为 0.15/0.85(兄弟排序更宽容)+ 源到目标 SVG 直线虚线
+      //        + before/after 蓝色实线间隙条 + inside 橙色加粗边框。
       let dragState: {
         source: HTMLElement;
         startX: number;
         startY: number;
         isDragging: boolean;
         ghost: HTMLElement | null;
+        overlay: {
+          svg: SVGSVGElement;
+          line: SVGPathElement;
+          gapBefore: HTMLDivElement;
+          gapAfter: HTMLDivElement;
+        } | null;
+        currentTarget: HTMLElement | null;
+        currentZone: import("../utils/dragDrop").DropZone | null;
       } | null = null;
 
       const isDescendant = (node: any, targetId: string): boolean => {
@@ -697,6 +708,93 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (g) g.remove();
       };
 
+      // === SVG 虚线 overlay:从源中心到目标中心的直线 ===
+      const createDragOverlay = () => {
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg") as SVGSVGElement;
+        svg.classList.add("drag-overlay");
+
+        const gapBefore = document.createElement("div");
+        gapBefore.className = "drag-gap drag-gap-before";
+        const gapAfter = document.createElement("div");
+        gapAfter.className = "drag-gap drag-gap-after";
+
+        const line = document.createElementNS(svgNS, "path") as SVGPathElement;
+        line.setAttribute("stroke", "#4dc4ff");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "6 4");
+        line.setAttribute("fill", "none");
+        line.setAttribute("opacity", "0.7");
+        svg.appendChild(line);
+
+        inner.appendChild(svg);
+        inner.appendChild(gapBefore);
+        inner.appendChild(gapAfter);
+
+        return { svg, line, gapBefore, gapAfter };
+      };
+
+      const removeDragOverlay = () => {
+        inner.querySelectorAll(".drag-overlay, .drag-gap").forEach((el) => el.remove());
+        inner.querySelectorAll(".drag-over, .drag-over-inside").forEach((el) => {
+          el.classList.remove("drag-over", "drag-over-inside");
+        });
+      };
+
+      // 根据 dragState.currentTarget / currentZone 更新所有视觉指示器
+      const updateDragOverlay = () => {
+        if (!dragState || !dragState.overlay) return;
+        const { line, gapBefore, gapAfter } = dragState.overlay;
+
+        // 清除上一帧的指示器
+        inner.querySelectorAll(".drag-over, .drag-over-inside").forEach((el) => {
+          el.classList.remove("drag-over", "drag-over-inside");
+        });
+        gapBefore.style.display = "none";
+        gapAfter.style.display = "none";
+
+        const target = dragState.currentTarget;
+        const zone = dragState.currentZone;
+        if (!target || !zone) {
+          line.setAttribute("d", "");
+          return;
+        }
+
+        // SVG 坐标相对于 inner(overlay 是 inner 的子元素)
+        const srcRect = dragState.source.getBoundingClientRect();
+        const dstRect = target.getBoundingClientRect();
+        const innerRect = inner.getBoundingClientRect();
+        const srcLocal = {
+          left: srcRect.left - innerRect.left,
+          top: srcRect.top - innerRect.top,
+          width: srcRect.width,
+          height: srcRect.height,
+        };
+        const dstLocal = {
+          left: dstRect.left - innerRect.left,
+          top: dstRect.top - innerRect.top,
+          width: dstRect.width,
+          height: dstRect.height,
+        };
+        line.setAttribute("d", buildSvgLine(srcLocal, dstLocal));
+
+        if (zone === "inside") {
+          target.classList.add("drag-over-inside");
+        } else if (zone === "before") {
+          target.classList.add("drag-over");
+          gapBefore.style.display = "block";
+          gapBefore.style.left = `${dstRect.left - innerRect.left}px`;
+          gapBefore.style.top = `${dstRect.top - innerRect.top - 4}px`;
+          gapBefore.style.width = `${dstRect.width}px`;
+        } else {
+          target.classList.add("drag-over");
+          gapAfter.style.display = "block";
+          gapAfter.style.left = `${dstRect.left - innerRect.left}px`;
+          gapAfter.style.top = `${dstRect.top - innerRect.top + dstRect.height - 2}px`;
+          gapAfter.style.width = `${dstRect.width}px`;
+        }
+      };
+
       onDragStart = (e: MouseEvent) => {
         if (e.button !== 0) return;
         const tpc = getMeTpc(e.target);
@@ -708,6 +806,9 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           startY: e.clientY,
           isDragging: false,
           ghost: null,
+          overlay: null,
+          currentTarget: null,
+          currentZone: null,
         };
       };
 
@@ -718,24 +819,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (!dragState.isDragging && Math.sqrt(dx * dx + dy * dy) > 5) {
           dragState.isDragging = true;
           inner.style.cursor = "grabbing";
-          // 创建 ghost 预览
           dragState.ghost = createGhost(dragState.source);
-          // 原节点变半透明（暗示正在拖动）
+          dragState.overlay = createDragOverlay();
           dragState.source.style.opacity = "0.3";
         }
         if (!dragState.isDragging) return;
 
-        // 更新 ghost 位置
         if (dragState.ghost) {
           dragState.ghost.style.left = e.clientX + 12 + "px";
           dragState.ghost.style.top = e.clientY + 12 + "px";
         }
 
-        // 清除之前的高亮
-        inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
-
-        // 检测目标节点（用 elementFromPoint 避免 me-parent 拦截）
-        // 临时隐藏 ghost 否则 elementFromPoint 返回 ghost
         if (dragState.ghost) dragState.ghost.style.display = "none";
         const el = document.elementFromPoint(e.clientX, e.clientY);
         if (dragState.ghost) dragState.ghost.style.display = "";
@@ -745,39 +839,41 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           const sourceNodeObj = (dragState.source as any).nodeObj;
           const targetId = (target as any).nodeObj?.id;
           if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
-            return; // 目标是源的子孙
+            dragState.currentTarget = null;
+            dragState.currentZone = null;
+            updateDragOverlay();
+            return;
           }
-          target.classList.add("drag-over");
+          const targetRect = target.getBoundingClientRect();
+          dragState.currentTarget = target;
+          dragState.currentZone = computeDropZone(targetRect, e.clientY);
+        } else {
+          dragState.currentTarget = null;
+          dragState.currentZone = null;
         }
+        updateDragOverlay();
       };
 
-      onDragEnd = (e: MouseEvent) => {
+      onDragEnd = (_e: MouseEvent) => {
         if (!dragState) return;
         inner.style.cursor = "";
 
-        // 恢复源节点透明度
         dragState.source.style.opacity = "";
-
-        // 移除 ghost
         removeGhost();
-        inner.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+        removeDragOverlay();
 
         if (!dragState.isDragging) {
           dragState = null;
           return;
         }
 
-        // 用 elementFromPoint 找目标（mouseup 的 target 在 WebKit 下可能不准）
-        const el = document.elementFromPoint(e.clientX, e.clientY);
-        const target = el ? getMeTpc(el as HTMLElement) : null;
+        const target = dragState.currentTarget;
+        const zone = dragState.currentZone;
 
-        if (target && target !== dragState.source) {
+        if (target && zone && target !== dragState.source) {
           const inst = instanceRef.current;
           try {
-            const r = target.getBoundingClientRect();
-            const relY = (e.clientY - r.top) / r.height;
             const sourceTpc = dragState.source;
-
             const sourceNodeObj = (sourceTpc as any).nodeObj;
             const targetId = (target as any).nodeObj?.id;
             if (sourceNodeObj && isDescendant(sourceNodeObj, targetId)) {
@@ -785,20 +881,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
               return;
             }
 
-            // 记录操作前 nodeData 用于诊断
             const beforeNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
 
-            if (relY < 0.25) {
+            if (zone === "before") {
               inst.moveNodeBefore([sourceTpc], target);
-            } else if (relY > 0.75) {
+            } else if (zone === "after") {
               inst.moveNodeAfter([sourceTpc], target);
             } else {
               inst.moveNodeIn([sourceTpc], target);
             }
 
             const afterNodeData = JSON.stringify(inst.nodeData, (k,v) => k==='parent' ? undefined : v);
-
-            // 如果 nodeData 没变化，说明 moveNode 失败（可能 API bug）
             if (beforeNodeData === afterNodeData) {
               console.warn("[drag] moveNode 未改变 nodeData——操作无效");
             }
