@@ -274,4 +274,5 @@ export function shutdownLlmBridge(): void {
   unlisteners.forEach((u) => u());
   unlisteners.length = 0;
   bridgeStarted = false;
+  llmSessionPaused = false;
 }

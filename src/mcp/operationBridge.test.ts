@@ -159,3 +159,174 @@ describe("FE-MCP-BRIDGE: undo 整合(Phase 3)", () => {
     expect(mind.calls).toContain("addChild:root:x");
   });
 });
+
+// === OB-024 zundo pause/resume LLM 整合 ===
+
+describe("FE-MCP-BRIDGE: OB-024 zundo pause/resume", () => {
+  let pauseSpy: ReturnType<typeof vi.fn>;
+  let resumeSpy: ReturnType<typeof vi.fn>;
+  let sessionChangedHandler:
+    | ((event: { payload: any }) => void | Promise<void>)
+    | null;
+
+  beforeEach(async () => {
+    const { shutdownLlmBridge } = await import("./operationBridge");
+    shutdownLlmBridge();
+    sessionChangedHandler = null;
+
+    pauseSpy = vi.fn();
+    resumeSpy = vi.fn();
+    const temporalSpy = {
+      pause: pauseSpy,
+      resume: resumeSpy,
+    };
+    (useMindMapStore as any).temporal = {
+      getState: () => temporalSpy,
+    };
+
+    const listenMod = await import("@tauri-apps/api/event");
+    vi.mocked(listenMod.listen).mockImplementation(
+      async (event: string, handler: any) => {
+        if (event === "llm-session-changed") {
+          sessionChangedHandler = handler;
+        }
+        return () => {};
+      },
+    );
+
+    // mock isTauri 返回 true
+    const envMod = await import("../utils/tauriEnv");
+    vi.spyOn(envMod, "isTauri").mockReturnValue(true);
+  });
+
+  it("★OB-024★ session acquired 时调 temporal.pause(LLM 操作不进 undo 历史)", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+    expect(sessionChangedHandler).not.toBeNull();
+
+    await sessionChangedHandler!({
+      payload: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    });
+
+    expect(pauseSpy).toHaveBeenCalledTimes(1);
+    expect(resumeSpy).not.toHaveBeenCalled();
+  });
+
+  it("★OB-024★ session released 时调 temporal.resume(用户一次 Cmd+Z 撤整个会话)", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+
+    // 先 acquired 触发 pause
+    await sessionChangedHandler!({
+      payload: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    });
+    expect(pauseSpy).toHaveBeenCalledTimes(1);
+
+    // 再 released 触发 resume
+    await sessionChangedHandler!({
+      payload: { session: null, reason: "released" },
+    });
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("★OB-024★ session expired 时也调 resume(所有会话结束路径都触发)", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+
+    await sessionChangedHandler!({
+      payload: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    });
+    await sessionChangedHandler!({
+      payload: { session: null, reason: "expired" },
+    });
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("★OB-024★ session forced(用户接管)时调 resume", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+
+    await sessionChangedHandler!({
+      payload: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    });
+    await sessionChangedHandler!({
+      payload: { session: null, reason: "forced" },
+    });
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("★OB-024★ 重复 acquired 不重复 pause(llmSessionPaused 守卫)", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+
+    const sessionPayload = {
+      payload: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    };
+    await sessionChangedHandler!(sessionPayload);
+    await sessionChangedHandler!(sessionPayload);
+    await sessionChangedHandler!(sessionPayload);
+
+    expect(pauseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("★OB-024★ 重复 session=null 不重复 resume", async () => {
+    const { initLlmBridge } = await import("./operationBridge");
+    await initLlmBridge();
+
+    await sessionChangedHandler!({ payload: { session: null, reason: "released" } });
+    await sessionChangedHandler!({ payload: { session: null, reason: "expired" } });
+    await sessionChangedHandler!({ payload: { session: null, reason: "forced" } });
+
+    expect(resumeSpy).not.toHaveBeenCalled();
+  });
+});
