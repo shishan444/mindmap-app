@@ -12,6 +12,7 @@ import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
 import { useWindowState } from "./hooks/useWindowState";
+import { useSubWindowCloseGuard } from "./hooks/useSubWindowCloseGuard";
 import { useMcpBridge } from "./mcp/mcpBridge";
 import { initLlmBridge } from "./mcp/operationBridge";
 import LlmSessionBanner from "./components/LlmSessionBanner";
@@ -200,55 +201,11 @@ function App() {
     };
   }, [setAllReminders]);
 
-  // === 子窗口关闭按钮处理(关键修复)===
-  // bug:用户报告子窗口关闭按钮无法关闭,只能 kill 进程
-  // 根因:Rust 全局 on_window_event 对动态创建的子窗口触发不可靠
+  // === 子窗口关闭按钮处理(关键修复,OB-016 / VP-MULTIWINDOW-CLOSE)===
+  // 历史 bug:7b21334(关闭按钮失效) / 4886a58(close 无限循环)
   // 修复:前端主动监听 close request,子窗口强制 destroy(绕过 Tauri 默认流程)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      if (!isTauri()) return;
-      try {
-        const win = getCurrentWindow();
-        const label = win.label;
-        console.log("[App][close-watch] useEffect 触发, label=", label);
-        if (label === "main") {
-          console.log("[App][close-watch] 主窗口,跳过子窗口 close 监听");
-          return;
-        }
-        console.log("[App][close-watch] 子窗口,注册 onCloseRequested");
-        unlisten = await win.onCloseRequested(async (event) => {
-          console.log("[App][close-watch] onCloseRequested 触发, label=", label);
-          event.preventDefault();
-          try {
-            console.log("[App][close-watch] 调用 win.destroy()");
-            await win.destroy();
-            console.log("[App][close-watch] destroy 成功");
-          } catch (e) {
-            console.error("[App][close-watch] destroy 失败", e);
-            try {
-              console.log("[App][close-watch] fallback 调用 win.close()");
-              await win.close();
-            } catch (e2) {
-              console.error("[App][close-watch] close 也失败", e2);
-            }
-          }
-        });
-        console.log("[App][close-watch] onCloseRequested 注册成功, unlisten=", typeof unlisten);
-
-        // 兜底:暴露一个手动关闭函数到 window,用户可通过 DevTools console 调用
-        (window as any).__forceCloseWindow = async () => {
-          console.log("[App][close-watch] 手动触发 __forceCloseWindow");
-          try { await win.destroy(); } catch (e) { console.error(e); }
-        };
-      } catch (e) {
-        console.warn("[App][close-watch] 注册失败", e);
-      }
-    })();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
+  // 详见 useSubWindowCloseGuard 的回归测试
+  useSubWindowCloseGuard();
 
   // 多窗口模式:点"新建"创建新窗口(当前窗口不动)
   // 这是 XMind 模式 — 每个文档独立窗口
