@@ -14,6 +14,7 @@ import {
 } from "../utils/imageEmbed";
 import { computeNodeReminderState } from "../utils/reminderState";
 import { computeDropZone, computePlaceholderRectFromActual, computeSiblingShift, buildConnectionLinePath, executeDrop, type DropZone } from "../utils/dragDrop";
+import { isEditingSession, shouldBlockDefaultDrag, shouldReSelectAfterDrop } from "../utils/editGuard";
 import "./MindMapCanvas.css";
 
 interface Props {
@@ -452,6 +453,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       let editTriggered = false;  // 防止 dblclick + click 计数重复触发
 
       onFallbackClick = (e: MouseEvent) => {
+        // ★ 修复(选择残留):兜底 — 点击非编辑框目标时显式结束悬挂的编辑会话。
+        // mind-elixir 的 input-box 只由 blur 驱动销毁;焦点未转移的边缘路径下它会
+        // 永久悬挂在原节点位置(视觉上等同"选中不释放")。blur 触发其收尾:
+        // 恢复节点显示 + 销毁编辑框 + fire finishEdit。
+        const active = document.activeElement as HTMLElement | null;
+        if (
+          isEditingSession(active) &&
+          !(e.target instanceof Node && active.contains(e.target))
+        ) {
+          active.blur();
+        }
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
         const inst = instanceRef.current;
@@ -859,8 +871,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         // mind-elixir 5.14 的 me-tpc 内部 <img>/<a href> 默认 draggable=true,
         // 即使 CSS 设了 pointer-events: none,浏览器仍会启动 HTML5 drag,
         // 触发 drag image(亮点)+ WKWebView drag state(黑屏)。
-        // 必须在 mousedown 阶段 preventDefault 才能彻底阻止。
-        e.preventDefault();
+        // ★ 修复(选择残留):编辑会话中放行 mousedown 默认行为 —
+        // preventDefault 会阻断焦点转移 → input-box 无法 blur → 编辑框悬挂。
+        // HTML5 drag 由 dragstart 监听 + draggable=false 双保险继续拦截,黑屏不复发。
+        if (shouldBlockDefaultDrag(document.activeElement)) {
+          e.preventDefault();
+        }
         dragState = {
           source: tpc,
           startX: e.clientX,
@@ -949,6 +965,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (result.ok && sourceId && inst) {
           setTimeout(() => {
             try {
+              // ★ 修复(抢选):用户在定时器窗口内已手动选中其他节点时不抢回,
+              // 否则用户刚点的节点会被清掉换回拖动源
+              const currentId = inst.currentNodes?.[0]?.nodeObj?.id;
+              if (!shouldReSelectAfterDrop(currentId, sourceId)) return;
               const newSource = inst.findEle?.(sourceId);
               if (newSource && inst.selectNode) {
                 inst.selectNode(newSource);
