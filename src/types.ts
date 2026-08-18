@@ -81,6 +81,8 @@ export interface UiPrefs {
   language: string;
   font_family?: string;
   font_size: number;
+  /** 节点默认文字颜色(不填=跟随主题) */
+  font_color?: string;
   show_minimap: boolean;
   show_toolbar: boolean;
 }

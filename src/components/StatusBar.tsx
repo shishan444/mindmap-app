@@ -7,32 +7,41 @@ export default function StatusBar() {
   const saveStatus = useMindMapStore((s) => s.saveStatus);
   const lastSavedAt = useMindMapStore((s) => s.lastSavedAt);
   const filePath = useMindMapStore((s) => s.filePath);
+  const reminders = useMindMapStore((s) => s.allReminders);
 
   return (
     <div className="status-bar">
       <div className="status-left">
-        <span>{nodeCount} 节点</span>
-        <span className="status-divider">|</span>
-        <span className="status-save">
-          {saveStatus === "saving"
-            ? "💾 保存中..."
-            : saveStatus === "error"
-            ? "⚠ 保存失败"
-            : dirty
-            ? "● 未保存"
-            : lastSavedAt
-            ? `💾 已保存 ${formatTime(lastSavedAt)}`
-            : "—"}
+        <span className="status-item status-save">
+          {saveStatus === "saving" ? (
+            "保存中…"
+          ) : saveStatus === "error" ? (
+            <span className="error">保存失败</span>
+          ) : dirty ? (
+            "● 未保存"
+          ) : lastSavedAt ? (
+            <>
+              <span className="status-dot"></span>已保存 {formatTime(lastSavedAt)}
+            </>
+          ) : (
+            "—"
+          )}
         </span>
+        <span className="status-divider">·</span>
+        <span className="status-item">{nodeCount} 节点</span>
+        {filePath && (
+          <>
+            <span className="status-divider">·</span>
+            <span className="status-item status-file-path" title={filePath}>
+              {filePath}
+            </span>
+          </>
+        )}
       </div>
       <div className="status-right">
-        {filePath && (
-          <span className="status-file-path" title={filePath}>
-            {filePath}
-          </span>
-        )}
-        <span className="status-divider">|</span>
-        <span>⏰ 0 提醒</span>
+        <span className="status-item">就绪</span>
+        <span className="status-divider">·</span>
+        <span className="status-item">{reminders?.length ?? 0} 提醒</span>
       </div>
     </div>
   );

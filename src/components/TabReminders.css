@@ -7,16 +7,17 @@
 
 .rem-add-btn {
   border: none;
-  background: #1a73e8;
+  background: linear-gradient(180deg, #0cf296 0%, #00c873 100%);
+  box-shadow: 0 0 20px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.35);
   color: white;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
 }
 
 .rem-add-btn:hover {
-  background: #1557b8;
+  filter: brightness(1.1);
 }
 
 .rem-add-form {
@@ -24,16 +25,19 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  background: #f5f5f5;
-  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border-soft);
+  box-shadow: var(--glass-highlight);
+  border-radius: 10px;
   margin-bottom: 12px;
 }
 
 .rem-add-form input,
 .rem-add-form select {
   padding: 6px 8px;
-  border: 1px solid #d1d1d1;
-  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
+  border-radius: 8px;
   font-size: 12px;
   font-family: inherit;
   outline: none;
@@ -41,7 +45,7 @@
 
 .rem-add-form input:focus,
 .rem-add-form select:focus {
-  border-color: #1a73e8;
+  border-color: var(--accent);
 }
 
 .rem-add-actions {
@@ -53,7 +57,7 @@
 .rem-cancel,
 .rem-save {
   padding: 5px 12px;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
   border: 1px solid transparent;
@@ -61,12 +65,13 @@
 
 .rem-cancel {
   background: transparent;
-  border-color: #d1d1d1;
-  color: #555;
+  border-color: rgba(0, 224, 127, 0.45);
+  color: var(--text-2);
 }
 
 .rem-save {
-  background: #1a73e8;
+  background: linear-gradient(180deg, #0cf296 0%, #00c873 100%);
+  box-shadow: 0 0 20px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.35);
   color: white;
 }
 
@@ -93,14 +98,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  background: #fafafa;
-  border-radius: 6px;
-  border-left: 3px solid #1a73e8;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 10px;
+  border-left: 3px solid var(--accent);
 }
 
 .rem-item.disabled {
   opacity: 0.5;
-  border-left-color: #999;
+  border-left-color: var(--text-3);
 }
 
 .rem-item-main {
@@ -119,12 +125,12 @@
 
 .rem-meta {
   font-size: 11px;
-  color: #666;
+  color: var(--text-2);
   margin-top: 2px;
 }
 
 .rem-repeat {
-  color: #1a73e8;
+  color: var(--accent);
 }
 
 .rem-item-actions {
@@ -139,13 +145,13 @@
   cursor: pointer;
   font-size: 14px;
   padding: 2px 6px;
-  border-radius: 4px;
-  color: #555;
+  border-radius: 8px;
+  color: var(--text-2);
 }
 
 .rem-toggle:hover,
 .rem-del:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.06);
 }
 
 .rem-del:hover {
@@ -155,9 +161,18 @@
 .rem-help {
   margin-top: 16px;
   padding: 8px 10px;
-  background: #fff8e1;
-  border-radius: 4px;
+  background: rgba(255, 210, 92, 0.06);
+  border: 1px solid rgba(255, 210, 92, 0.25);
+  border-radius: 8px;
   font-size: 11px;
   color: #8886;
   color: #6c6c6c;
+}
+
+/* 玻璃化补充:提醒卡时间块/文字层级 */
+.tab-reminders .rem-time, .tab-reminders .rem-card-time {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .tab-reminders .rem-add-form, .tab-reminders .rem-card { background-color: #1c1f26; }
 }

@@ -12,9 +12,9 @@ pub mod freemind;
 pub mod state;
 
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WindowEvent,
+    AppHandle, Emitter, Manager, WindowEvent,
 };
 
 #[cfg(test)]
@@ -80,6 +80,31 @@ pub fn run() {
 
             // === 创建托盘 ===
             setup_tray(app)?;
+
+            // === 原生菜单栏(macOS 屏幕顶,替代窗口内 HTML 菜单栏) ===
+            // 单导航设计:窗口内只留一条玻璃工具栏,菜单能力走系统菜单。
+            // 动作经 menu-action 事件定向到焦点窗口的前端分发。
+            let menu = build_app_menu(app)?;
+            app.on_menu_event(|app, event| {
+                let id = event.id().0.clone();
+                // 定向到焦点窗口(多窗口时菜单作用于当前文档)
+                let target = app
+                    .webview_windows()
+                    .into_iter()
+                    .find(|(_, w)| w.is_focused().unwrap_or(false))
+                    .map(|(_, w)| w.label().to_string());
+                let emit_result = match target {
+                    Some(label) => app.emit_to(&label, "menu-action", id),
+                    None => app.emit("menu-action", id),
+                };
+                if let Err(e) = emit_result {
+                    eprintln!("[menu] 动作事件发送失败: {}", e);
+                }
+            });
+            if let Some(main) = app.get_webview_window("main") {
+                main.set_menu(menu)?;
+            }
+
 
             // === 初始化全局共享状态(AppState) ===
             // 关键:用于避免 reminder 调度器和 commands 之间的写写冲突
@@ -435,4 +460,100 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         }
         _ => {}
     }
+}
+
+/// 原生应用菜单(macOS 系统菜单栏)
+/// 设计决策:F2 单导航修正 — 删除窗口内 HTML 菜单栏,菜单能力移到系统级,
+/// 免费获得原生外观/行为与全局快捷键;动作通过 menu-action 事件桥接到前端。
+/// 注意:撤销/重做不绑 accelerator — 前端已有 Cmd+Z 监听,避免双触发。
+fn build_app_menu(
+    app: &mut tauri::App,
+) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    let sep = PredefinedMenuItem::separator(app)?;
+
+    // app 菜单(macOS 首个 submenu 显示为应用名)
+    let m_about = MenuItem::with_id(app, "about", "关于 思维导图", true, None::<&str>)?;
+    let m_prefs = MenuItem::with_id(app, "prefs", "偏好设置…", true, Some("cmdOrCtrl+,"))?;
+    let pre_hide = PredefinedMenuItem::hide(app, None)?;
+    let pre_quit = PredefinedMenuItem::quit(app, None)?;
+    let app_menu = Submenu::with_id_and_items(
+        app,
+        "appmenu",
+        "思维导图",
+        true,
+        &[&m_about, &sep, &m_prefs, &sep, &pre_hide, &pre_quit],
+    )?;
+
+    // 文件
+    let f_new = MenuItem::with_id(app, "new", "新建文档", true, Some("cmdOrCtrl+n"))?;
+    let f_open = MenuItem::with_id(app, "open", "打开…", true, Some("cmdOrCtrl+o"))?;
+    let f_save = MenuItem::with_id(app, "save", "保存", true, Some("cmdOrCtrl+s"))?;
+    let f_png = MenuItem::with_id(app, "export-png", "导出 PNG 图片", true, None::<&str>)?;
+    let f_svg = MenuItem::with_id(app, "export-svg", "导出 SVG 矢量", true, None::<&str>)?;
+    let f_md = MenuItem::with_id(app, "export-markdown", "导出 Markdown", true, None::<&str>)?;
+    let f_opml = MenuItem::with_id(app, "export-opml", "导出 OPML", true, None::<&str>)?;
+    let f_imd = MenuItem::with_id(app, "import-markdown", "导入 Markdown…", true, None::<&str>)?;
+    let f_iopml = MenuItem::with_id(app, "import-opml", "导入 OPML…", true, None::<&str>)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let sep3 = PredefinedMenuItem::separator(app)?;
+    let file_menu = Submenu::with_id_and_items(
+        app,
+        "file",
+        "文件",
+        true,
+        &[
+            &f_new, &f_open, &f_save, &sep2, &f_png, &f_svg, &f_md, &f_opml, &sep3, &f_imd,
+            &f_iopml,
+        ],
+    )?;
+
+    // 编辑(undo/redo 走前端既有 Cmd+Z,不绑 accelerator)
+    let e_undo = MenuItem::with_id(app, "undo", "撤销", true, None::<&str>)?;
+    let e_redo = MenuItem::with_id(app, "redo", "重做", true, None::<&str>)?;
+    let e_edit = MenuItem::with_id(app, "edit-text", "编辑节点文本", true, None::<&str>)?;
+    let e_del = MenuItem::with_id(app, "delete-node", "删除节点", true, None::<&str>)?;
+    let sep4 = PredefinedMenuItem::separator(app)?;
+    let edit_menu = Submenu::with_id_and_items(
+        app,
+        "edit",
+        "编辑",
+        true,
+        &[&e_undo, &e_redo, &sep4, &e_edit, &e_del],
+    )?;
+
+    // 视图
+    let v_layout = MenuItem::with_id(app, "auto-layout", "自动布局整理", true, Some("cmdOrCtrl+shift+l"))?;
+    let v_sidebar = MenuItem::with_id(app, "toggle-sidebar", "切换侧边栏", true, Some("cmdOrCtrl+\\"))?;
+    let view_menu = Submenu::with_id_and_items(
+        app,
+        "view",
+        "视图",
+        true,
+        &[&v_layout, &v_sidebar],
+    )?;
+
+    // 插入
+    let i_child = MenuItem::with_id(app, "add-child", "添加子节点", true, None::<&str>)?;
+    let i_sib = MenuItem::with_id(app, "add-sibling", "添加兄弟节点", true, None::<&str>)?;
+    let p0 = MenuItem::with_id(app, "prio-p0", "优先级 P0 · 紧急", true, None::<&str>)?;
+    let p1 = MenuItem::with_id(app, "prio-p1", "优先级 P1 · 高", true, None::<&str>)?;
+    let p2 = MenuItem::with_id(app, "prio-p2", "优先级 P2 · 中", true, None::<&str>)?;
+    let p3 = MenuItem::with_id(app, "prio-p3", "优先级 P3 · 低", true, None::<&str>)?;
+    let sep5 = PredefinedMenuItem::separator(app)?;
+    let insert_menu = Submenu::with_id_and_items(
+        app,
+        "insert",
+        "插入",
+        true,
+        &[&i_child, &i_sib, &sep5, &p0, &p1, &p2, &p3],
+    )?;
+
+    // 帮助
+    let h_about = MenuItem::with_id(app, "about", "关于 思维导图", true, None::<&str>)?;
+    let help_menu = Submenu::with_id_and_items(app, "help", "帮助", true, &[&h_about])?;
+
+    Ok(Menu::with_items(
+        app,
+        &[&app_menu, &file_menu, &edit_menu, &view_menu, &insert_menu, &help_menu],
+    )?)
 }

@@ -282,6 +282,9 @@ pub struct UiPrefs {
     pub font_family: Option<String>,
     #[serde(default = "default_font_size")]
     pub font_size: u32,
+    /// 节点默认文字颜色(None=跟随深色主题默认 #f2f4f7)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_color: Option<String>,
     #[serde(default = "default_true")]
     pub show_minimap: bool,
     #[serde(default = "default_true")]
@@ -308,6 +311,7 @@ impl Default for UiPrefs {
             language: default_lang(),
             font_family: None,
             font_size: default_font_size(),
+            font_color: None,
             show_minimap: true,
             show_toolbar: true,
         }

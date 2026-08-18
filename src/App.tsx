@@ -7,6 +7,7 @@ import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
 import PreferencesModal from "./components/PreferencesModal";
+import AboutModal from "./components/AboutModal";
 import ReminderToast from "./components/ReminderToast";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -24,6 +25,7 @@ import {
 } from "./utils/devLogger";
 import { isTauri, warnBrowserModeOnce } from "./utils/tauriEnv";
 import type { Config, Content, Priority, Reminder } from "./types";
+import "./theme/tokens.css";
 import "./App.css";
 
 // 模块加载时初始化 dev 日志
@@ -32,6 +34,7 @@ warnBrowserModeOnce();
 
 function App() {
   const [booted, setBooted] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResultIds, setSearchResultIds] = useState<string[]>([]);
   const [searchIndex, setSearchIndex] = useState(0);
@@ -52,6 +55,17 @@ function App() {
   useEffect(() => {
     initLlmBridge().catch(console.error);
   }, []);
+
+  // === 节点默认样式生效链路(config.ui → CSS 变量,保存后即时生效) ===
+  // font_family/font_size 原本只有配置与 UI,从未应用(半成品链路,本次补全);
+  // font_color 为新增。空 font_family = 继承系统字体栈;font_color 空 = 主题默认。
+  const uiPrefs = useMindMapStore((s) => s.config?.ui);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--node-font-size", `${uiPrefs?.font_size ?? 14}px`);
+    root.style.setProperty("--node-font-family", uiPrefs?.font_family?.trim() || "inherit");
+    root.style.setProperty("--node-color", uiPrefs?.font_color?.trim() || "#f2f4f7");
+  }, [uiPrefs?.font_size, uiPrefs?.font_family, uiPrefs?.font_color]);
 
   // LLM 持锁时锁定画布(加 llm-active class)
   const llmSession = useMindMapStore((s) => s.llmSession);
@@ -206,6 +220,30 @@ function App() {
   // 修复:前端主动监听 close request,子窗口强制 destroy(绕过 Tauri 默认流程)
   // 详见 useSubWindowCloseGuard 的回归测试
   useSubWindowCloseGuard();
+
+  // === 原生菜单动作分发(F2 单导航:macOS 系统菜单 → menu-action 事件桥) ===
+  // Rust 侧 on_menu_event 定向 emit 到焦点窗口;此处映射到既有 handler。
+  // handlers 经 ref 保持最新(effect 只挂载一次)。
+  const menuActionsRef = useRef<Record<string, () => void>>({});
+  useEffect(() => {
+    if (!isTauri()) return;
+    let un: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        un = await listen<string>("menu-action", (ev) => {
+          try {
+            menuActionsRef.current[ev.payload]?.();
+          } catch (err) {
+            console.error("[menu] 动作执行失败", ev.payload, err);
+          }
+        });
+      } catch (e) {
+        console.warn("[menu] 事件监听不可用", e);
+      }
+    })();
+    return () => un?.();
+  }, []);
 
   // 多窗口模式:点"新建"创建新窗口(当前窗口不动)
   // 这是 XMind 模式 — 每个文档独立窗口
@@ -524,12 +562,65 @@ function App() {
     }
   };
 
+  menuActionsRef.current = {
+    new: handleNew,
+    open: handleOpen,
+    save: handleSave,
+    "export-png": handleExportPng,
+    "export-svg": handleExportSvg,
+    "export-markdown": handleExportMarkdown,
+    "export-opml": handleExportOpml,
+    "import-markdown": handleImportMarkdown,
+    "import-opml": handleImportOpml,
+    "prio-p0": () => handleSetPriority("P0"),
+    "prio-p1": () => handleSetPriority("P1"),
+    "prio-p2": () => handleSetPriority("P2"),
+    "prio-p3": () => handleSetPriority("P3"),
+    about: () => setAboutOpen(true),
+    prefs: () => useMindMapStore.getState().openPreferences(),
+    undo: () => undo(),
+    redo: () => redo(),
+    "toggle-sidebar": () => useMindMapStore.getState().toggleSidebar(),
+    "edit-text": () => {
+      const mind = useMindMapStore.getState().mindInstance;
+      const s = getSelectedNode(mind);
+      if (mind && s) { mind.selectNode?.(s); mind.beginEdit(s); }
+    },
+    "delete-node": () => {
+      const mind = useMindMapStore.getState().mindInstance;
+      const s = getSelectedNode(mind);
+      if (mind && s && s.tagName !== "ME-ROOT") mind.removeNodes(mind.currentNodes || [s]);
+    },
+    "add-child": () => {
+      const mind = useMindMapStore.getState().mindInstance;
+      const s = getSelectedNode(mind);
+      if (mind && s) { mind.addChild(s); settleCanvasFocus(); }
+    },
+    "add-sibling": () => {
+      const mind = useMindMapStore.getState().mindInstance;
+      const s = getSelectedNode(mind);
+      if (mind && s && s.tagName !== "ME-ROOT") { mind.insertSibling("after", s); settleCanvasFocus(); }
+    },
+    "auto-layout": () => {
+      const mind = useMindMapStore.getState().mindInstance;
+      if (mind?.layout) { mind.layout(); if (mind.toCenter) mind.toCenter(); }
+    },
+  };
+
   if (!booted) {
     return <div className="app-booting">加载中...</div>;
   }
 
   return (
     <div className="app-root">
+      {/* 舞台装饰层:三枚同族冷色光斑 + 点阵 + 渐晕(z-index 0,内容 z-index 1+) */}
+      <div className="stage-fx" aria-hidden="true">
+        <div className="glow-orb orb-blue"></div>
+        <div className="glow-orb orb-purple"></div>
+        <div className="glow-orb orb-green"></div>
+        <div className="dot-grid"></div>
+        <div className="vignette"></div>
+      </div>
       <Toolbar
         onNew={handleNew}
         onOpen={handleOpen}
@@ -541,7 +632,6 @@ function App() {
         onImportMarkdown={handleImportMarkdown}
         onImportOpml={handleImportOpml}
         onSetPriority={handleSetPriority}
-        onOpenPreferences={() => useMindMapStore.getState().openPreferences()}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         onSearchNext={handleSearchNext}
@@ -558,11 +648,29 @@ function App() {
       </div>
       <StatusBar />
       <PreferencesModal />
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ReminderToast />
       <LlmSessionBanner />
       <LlmOperationHistory />
     </div>
   );
+}
+
+/** 菜单动作 helper:当前选中节点(currentNodes 优先,fallback DOM selected) */
+function getSelectedNode(mind: any): any | null {
+  const cn = mind?.currentNodes;
+  if (Array.isArray(cn) && cn.length > 0) return cn[0];
+  return document.querySelector("me-tpc.selected") as any;
+}
+
+/** 添加节点后:关闭编辑框并把焦点还给画布(与快捷键路径行为一致) */
+function settleCanvasFocus() {
+  setTimeout(() => {
+    const ib = document.querySelector("#input-box") as HTMLElement | null;
+    if (ib) ib.blur();
+    const mc = document.querySelector(".map-container") as HTMLElement | null;
+    if (mc) mc.focus();
+  }, 50);
 }
 
 /** 查找指定 id 节点的优先级 */

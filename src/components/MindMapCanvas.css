@@ -2,8 +2,9 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #f7f7f5;
+  background: transparent;
   min-width: 0;
+  border-radius: var(--radius-m);
 }
 
 /* 外层 wrapper：撑满父容器，固定布局（mind-elixir 不会修改这层） */
@@ -70,7 +71,7 @@
 
 .empty-hint {
   opacity: 0.6;
-  font-size: 12px !important;
+  font-size: calc(var(--node-font-size, 13px) - 1px) !important;
 }
 
 /* 统一 mind-elixir 浮动工具栏图标大小（避免视觉不一致） */
@@ -195,36 +196,18 @@
   background: #1a1a2e;
 }
 
-/* === 优先级视觉标记:全包围彩色边框 + 边框外左侧图标 === */
-/* 梯度加粗 + P0 红色发光:让 P0/P1/P2/P3 视觉差异一眼可辨 */
-
-/* P0 紧急:5px 实线红 + 红色发光阴影(警示感最强) */
+/* === 优先级视觉标记:左侧彩条(P0 发光),与玻璃七层共存 === */
 .mind-elixir-inner me-tpc.priority-p0 {
-  border-width: 5px !important;
-  border-style: solid !important;
-  border-color: #e74c3c !important;
-  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.35), 0 0 12px rgba(231, 76, 60, 0.6) !important;
+  box-shadow: inset 3px 0 0 var(--p0), 0 0 14px rgba(255, 92, 92, 0.45), var(--e1) !important;
 }
-
-/* P1 高:4px 实线橙 */
 .mind-elixir-inner me-tpc.priority-p1 {
-  border-width: 4px !important;
-  border-style: solid !important;
-  border-color: #f39c12 !important;
+  box-shadow: inset 3px 0 0 var(--p1), var(--e1) !important;
 }
-
-/* P2 中:3px 实线蓝 */
 .mind-elixir-inner me-tpc.priority-p2 {
-  border-width: 3px !important;
-  border-style: solid !important;
-  border-color: #3b82f6 !important;
+  box-shadow: inset 3px 0 0 var(--p2), var(--e1) !important;
 }
-
-/* P3 低:2px 虚线灰(最弱,表示"标记但不紧") */
 .mind-elixir-inner me-tpc.priority-p3 {
-  border-width: 2px !important;
-  border-style: dashed !important;
-  border-color: #95a5a6 !important;
+  box-shadow: inset 3px 0 0 var(--p3), var(--e1) !important;
 }
 
 /* 边框外左侧图标（::before pseudo-element + SVG data URI） */
@@ -355,4 +338,191 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+
+/* ============================================================
+   画布毛玻璃设计(深色舞台 + 节点七层玻璃)
+   ============================================================ */
+
+/* mind-elixir 变量接管:默认即深色(dark-theme class 与之幂等) */
+.mind-elixir-inner .map-container,
+.mind-elixir-inner.dark-theme .map-container {
+  --bgcolor: transparent;
+  --color: #f2f4f7;
+  --main-bgcolor: rgba(255, 255, 255, 0.06);
+  --main-color: #f2f4f7;
+  --main-bgcolor-transparent: rgba(255, 255, 255, 0.04);
+  --root-bgcolor: rgba(0, 224, 127, 0.16);
+  --root-color: #f2f4f7;
+  --root-border-color: rgba(0, 232, 138, 0.45);
+  --panel-bgcolor: rgba(255, 255, 255, 0.05);
+  --panel-color: #c9ced6;
+  --panel-border-color: rgba(255, 255, 255, 0.10);
+  --selected: #00e07f;
+  background-color: transparent;
+}
+.mind-elixir-inner,
+.mind-elixir-inner.dark-theme {
+  background: transparent;
+}
+
+/* 节点(me-tpc)七层玻璃卡 */
+.mind-elixir-inner me-tpc {
+  position: relative;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0) 22%),
+    var(--noise),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.04) 100%) !important;
+  background-color: transparent !important;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--e1), var(--glass-highlight) !important;
+  font-size: var(--node-font-size, 13px) !important;
+  font-family: var(--node-font-family, inherit) !important;
+  color: var(--node-color, #f2f4f7) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.mind-elixir-inner me-tpc:hover {
+  border-color: rgba(255, 255, 255, 0.30) !important;
+}
+/* 选中态:绿描边 + 发光 + 提升一层 */
+.mind-elixir-inner me-tpc.selected {
+  border-color: rgba(0, 224, 127, 0.70) !important;
+  box-shadow: 0 0 30px rgba(0, 224, 127, 0.30), 0 6px 14px rgba(0,0,0,0.34), 0 22px 52px rgba(0,0,0,0.38), var(--glass-highlight) !important;
+}
+/* 根节点:绿色渐变强调卡(L7 内部径向发光) */
+.mind-elixir-inner me-root > me-tpc,
+.mind-elixir-inner me-tpc.me-root-topic {
+  background-image:
+    radial-gradient(ellipse 80% 90% at 30% 0%, rgba(0, 232, 138, 0.20) 0%, rgba(0, 232, 138, 0) 65%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 18%),
+    var(--noise),
+    linear-gradient(145deg, rgba(74, 222, 128, 0.22) 0%, rgba(0, 224, 127, 0.09) 45%, rgba(255, 255, 255, 0.04) 100%) !important;
+  border: 1px solid rgba(0, 232, 138, 0.45) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 0 46px rgba(0, 232, 138, 0.26), 0 6px 16px rgba(0, 0, 0, 0.38), 0 28px 64px rgba(0, 0, 0, 0.42), var(--glass-highlight) !important;
+  font-weight: 600;
+}
+
+/* 连线:提亮为白系半透明 */
+.mind-elixir-inner .map-canvas svg path {
+  stroke: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* 编辑框(#input-box):深色玻璃 */
+.mind-elixir-inner #input-box {
+  font-size: var(--node-font-size, 13px) !important;
+  font-family: var(--node-font-family, inherit) !important;
+  color: var(--node-color, #f2f4f7) !important;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0) 20%),
+    var(--noise),
+    linear-gradient(180deg, rgba(28, 32, 42, 0.96) 0%, rgba(22, 25, 32, 0.96) 100%) !important;
+  color: #f2f4f7 !important;
+  border: 1px solid rgba(0, 224, 127, 0.45) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 24px rgba(0, 224, 127, 0.20), var(--e2) !important;
+  outline: none !important;
+}
+
+/* 右键菜单:玻璃浮层七层 */
+.ctx-menu {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0) 18%),
+    var(--noise),
+    linear-gradient(180deg, rgba(34, 38, 48, 0.92) 0%, rgba(24, 27, 35, 0.92) 100%);
+  backdrop-filter: var(--blur-float);
+  -webkit-backdrop-filter: var(--blur-float);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--radius-m);
+  box-shadow: var(--e3), var(--glass-highlight);
+}
+.ctx-menu-item {
+  color: var(--text-2);
+  border-radius: var(--radius-s);
+  margin: 0 4px;
+}
+.ctx-menu-item:hover {
+  background: var(--accent-tint);
+  color: var(--text-1);
+}
+.ctx-menu-item.ctx-disabled {
+  color: var(--text-4);
+}
+.ctx-menu-divider {
+  background: var(--glass-border-soft);
+  margin: 4px 8px;
+}
+
+/* 空状态:深色字 */
+.canvas-empty {
+  color: var(--text-3);
+}
+
+/* 拖动视觉:统一 accent 绿(与全局唯一交互强调色一致) */
+.mind-elixir-inner .drag-source {
+  outline: 2px solid var(--accent) !important;
+  box-shadow:
+    0 0 0 4px rgba(0, 224, 127, 0.22),
+    0 6px 18px rgba(0, 224, 127, 0.40) !important;
+}
+.mind-elixir-inner .drag-placeholder-r {
+  border: 2px dashed var(--accent);
+  background: rgba(0, 224, 127, 0.10);
+  box-shadow: 0 0 0 1px rgba(0, 224, 127, 0.2), 0 2px 8px rgba(0, 224, 127, 0.18);
+}
+.mind-elixir-inner .drag-over {
+  outline: 2px dashed var(--accent) !important;
+}
+
+/* 附件渲染与角标:深色适配 */
+.attached-render {
+  background: rgba(13, 15, 22, 0.45) !important;
+}
+.attached-ext-tag {
+  background: rgba(13, 15, 22, 0.85) !important;
+  color: var(--attached-type-color, #8a919c) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mind-elixir-inner me-tpc,
+  .mind-elixir-inner #input-box {
+  font-size: var(--node-font-size, 13px) !important;
+  font-family: var(--node-font-family, inherit) !important;
+  color: var(--node-color, #f2f4f7) !important;
+    background-image: none !important;
+    background-color: #1c1f26 !important;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .ctx-menu {
+    background-image: none;
+    background-color: #1a1d24;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+}
+
+/* 附件类型图标徽章:玻璃容器衬托(与侧栏 file-type-badge 同构) */
+.attached-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  box-shadow: var(--glass-highlight), 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+/* 缩略图 fallback 图标:玻璃底衬托(真实缩略图不加) */
+img.attached-fallback {
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  box-shadow: var(--glass-highlight), 0 2px 8px rgba(0, 0, 0, 0.28);
+  width: 52px; height: 52px;
 }

@@ -1,0 +1,123 @@
+/* ============================================================
+   mindmap-app 毛玻璃设计系统 · 设计 Token
+   来源:works/tmp/2026081710-毛玻璃原型/demo.html (v5,已确认)
+   规格:works/tmp/2026081710-毛玻璃原型/design-spec.md
+   单卡七层构造: L1 基底+模糊 / L2 透光渐变 / L3 磨砂噪点 /
+                L4 渐变边框 / L5 顶部受光带 / L6 内容浮起 / L7 环境映射
+   ============================================================ */
+:root {
+  /* 舞台:深蓝灰基底(非纯黑,带蓝紫倾向 → 色彩层次的前提) */
+  --bg-base: #0d0f16;
+  --bg-gradient: linear-gradient(160deg, #161a28 0%, #0d0f16 45%, #0a0c13 100%);
+  --accent: #00e07f;
+  --accent-deep: #00b86a;
+  --accent-glow: rgba(0, 224, 127, 0.40);
+  --accent-tint: rgba(0, 224, 127, 0.12);
+
+  /* 三级玻璃 */
+  --glass-panel: rgba(255, 255, 255, 0.05);
+  --glass-panel-strong: rgba(255, 255, 255, 0.07);
+  --glass-float-base: rgba(30, 34, 44, 0.88);
+  --blur-panel: blur(18px) saturate(150%);
+  --blur-float: blur(28px) saturate(160%);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --glass-border-soft: rgba(255, 255, 255, 0.07);
+  /* 玻璃厚度:上缘反光 + 下缘暗边 */
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+  /* 玻璃顶光渐变(L2 基础版,上亮下暗) */
+  --glass-lit: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%);
+  /* 环境色玻璃:顶栏偏蓝(呼应右上蓝光) / 侧栏偏绿(呼应右下绿光) */
+  --glass-lit-blue: linear-gradient(180deg, rgba(214, 226, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  --glass-lit-teal: linear-gradient(180deg, rgba(217, 255, 224, 0.13) 0%, rgba(255, 255, 255, 0.045) 100%);
+
+  /* 纵深阴影体系(elevation,每级=贴影+漂浮影) */
+  --e1: 0 2px 6px rgba(0, 0, 0, 0.32), 0 12px 32px rgba(0, 0, 0, 0.30);
+  --e2: 0 6px 14px rgba(0, 0, 0, 0.34), 0 24px 64px rgba(0, 0, 0, 0.46);
+  --e3: 0 10px 24px rgba(0, 0, 0, 0.38), 0 32px 72px rgba(0, 0, 0, 0.54);
+  --e4: 0 18px 36px rgba(0, 0, 0, 0.44), 0 56px 120px rgba(0, 0, 0, 0.62);
+
+  /* 文字四级 */
+  --text-1: #f2f4f7;
+  --text-2: #c9ced6;
+  --text-3: #8a919c;
+  --text-4: #5c626b;
+
+  /* 语义色(优先级) */
+  --p0: #ff5c5c;  --p1: #ff9f43;  --p2: #ffd25c;  --p3: #7a828e;
+
+  /* 圆角 */
+  --radius-s: 8px;  --radius-m: 12px;  --radius-l: 16px;
+
+  /* L3 磨砂颗粒:灰度分形噪点,alpha .06(极克制,只负责"不纯色") */
+  --noise: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  /* L4 渐变边框:上亮→下暗(边缘受光不均) */
+  --edge: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.10) 55%, rgba(255, 255, 255, 0.04) 100%);
+  --edge-green: linear-gradient(180deg, rgba(0, 232, 138, 0.55) 0%, rgba(0, 232, 138, 0.18) 60%, rgba(0, 232, 138, 0.08) 100%);
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 节点内容默认样式(由偏好设置 config.ui 驱动,App 运行时覆盖) */
+  --node-font-size: 13px;
+  --node-font-family: inherit;
+  --node-color: #f2f4f7;
+}
+
+/* ============================================================
+   舞台:光斑 + 点阵 + 渐晕(App 布局的背景装饰层)
+   ============================================================ */
+.stage-fx {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+.stage-fx .glow-orb {
+  position: absolute; border-radius: 50%;
+  filter: blur(100px); opacity: 0.9;
+}
+.stage-fx .orb-blue {
+  width: 720px; height: 720px; right: -180px; top: -260px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.34) 0%, transparent 66%);
+}
+.stage-fx .orb-purple {
+  width: 560px; height: 560px; left: -200px; top: 28%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.22) 0%, transparent 68%);
+}
+.stage-fx .orb-green {
+  width: 640px; height: 640px; right: 6%; bottom: -280px;
+  background: radial-gradient(circle, rgba(0, 224, 127, 0.24) 0%, transparent 66%);
+}
+.stage-fx .dot-grid {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 95% 85% at 50% 45%, black 35%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 95% 85% at 50% 45%, black 35%, transparent 100%);
+}
+.stage-fx .vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 120% 105% at 50% 40%, transparent 58%, rgba(4, 5, 10, 0.42) 100%);
+}
+
+/* ============================================================
+   通用:玻璃卡片七层构造(L4 渐变描边 mask 技术,兼容圆角)
+   用法:元素 position:relative + 本 class(或复制选择器到组件 CSS)
+   ============================================================ */
+.glass-edge::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: var(--edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* L6 内容浮起(标题/徽章/数值类通用) */
+.glass-emboss {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
+/* 透明度偏好降级:实色替代玻璃 */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --blur-panel: none;
+    --blur-float: none;
+  }
+}

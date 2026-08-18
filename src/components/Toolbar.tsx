@@ -3,8 +3,8 @@ import { useMindMapStore } from "../store";
 import type { Priority } from "../types";
 import { PRIORITY_LABELS } from "../types";
 import { logUserAction } from "../utils/devLogger";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./Toolbar.css";
 
 interface Props {
@@ -18,7 +18,6 @@ interface Props {
   onImportMarkdown: () => void;
   onImportOpml: () => void;
   onSetPriority: (p: Priority) => void;
-  onOpenPreferences: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onSearchNext: () => void;
@@ -62,25 +61,26 @@ function OpenDropdown() {
   if (recentFiles.length === 0) return null;
 
   return (
-    <div className="dropdown-menu">
-      <div className="dropdown-divider" />
-      <div style={{ padding: "4px 12px", fontSize: 11, color: "#999" }}>🕐 最近文件</div>
+    <>
+      <div className="dd-sep" />
+      <div className="dd-group-label">最近文件</div>
       {recentFiles.map((f) => (
         <button
           key={f.path}
-          className="dropdown-item"
+          className="dd-item"
           onClick={() => {
             logUserAction("toolbar.openRecent", { path: f.path });
             openRecent(f.path, f.name);
           }}
           title={f.path}
         >
-          📄 {f.name}
+          <span className="dd-label">{f.name}</span>
         </button>
       ))}
-    </div>
+    </>
   );
 }
+
 export default function Toolbar({
   onNew,
   onOpen,
@@ -92,185 +92,125 @@ export default function Toolbar({
   onImportMarkdown,
   onImportOpml,
   onSetPriority,
-  onOpenPreferences,
   searchQuery,
   onSearchChange,
   onSearchNext,
   searchResultCount,
   searchCurrentIndex,
 }: Props) {
+  // 窗口拖动 JS 兜底:与 data-tauri-drag-region 双保险。
+  // 仅当 mousedown 落在容器/grip 本身(非按钮等子元素)且为主键时启动原生拖动。
+  const dragWindow = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (e.target !== e.currentTarget) return;
+    getCurrentWindow().startDragging().catch(() => { /* 浏览器/测试环境忽略 */ });
+  };
+
+
   const dirty = useMindMapStore((s) => s.dirty);
   const content = useMindMapStore((s) => s.content);
-  // 子窗口判断(macOS 关闭按钮失效时,工具栏显示"关闭窗口"兜底按钮)
-  const isChildWindow = (() => {
-    try {
-      return getCurrentWindow().label !== "main";
-    } catch {
-      return false;
-    }
-  })();
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group brand">
-        <span className="brand-icon">🧠</span>
-      </div>
+    <div className="toolbar-wrap">
 
-      <div className="toolbar-group">
+
+      {/* ============ 层2:工具栏(高频操作,文字按钮) ============ */}
+      <div className="toolbar" data-tauri-drag-region onMouseDown={dragWindow}>
         <button
-          className="tb-btn"
-          onClick={() => {
-            logUserAction("toolbar.click", { target: "new" });
-            onNew();
-          }}
-          title="新建"
+          className="tb-primary"
+          title="新建文档"
+          onClick={() => { logUserAction("toolbar.click", { target: "new" }); onNew(); }}
         >
-          📝
+          新建文档
         </button>
-        <div className="priority-dropdown" title="打开文件">
+        <div className="priority-dropdown">
           <button
             className="tb-btn"
-            onClick={() => {
-              logUserAction("toolbar.click", { target: "open" });
-              onOpen();
-            }}
+            title="打开"
+            onClick={() => { logUserAction("toolbar.click", { target: "open" }); onOpen(); }}
           >
-            📂
+            打开
           </button>
-          <OpenDropdown />
+          <div className="dropdown-menu">
+            <OpenDropdown />
+          </div>
         </div>
         <button
           className="tb-btn"
-          onClick={() => {
-            logUserAction("toolbar.click", { target: "save" });
-            onSave();
-          }}
           title="保存"
+          onClick={() => { logUserAction("toolbar.click", { target: "save" }); onSave(); }}
           disabled={!content}
         >
-          💾{dirty ? "*" : ""}
+          {dirty && <span className="dirty-dot"></span>}保存
         </button>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <div className="priority-dropdown" title="设置优先级">
-          <button className="tb-btn" disabled={!content}>
-            🏷 优先级 ▾
+        <div className="tb-divider" />
+        <div className="priority-dropdown">
+          <button className="tb-btn" title="优先级" disabled={!content}>
+            优先级 <span className="caret">▾</span>
           </button>
           <div className="dropdown-menu">
             {(["P0", "P1", "P2", "P3"] as Priority[]).map((p) => (
               <button
                 key={p}
                 className="dropdown-item"
-                onClick={() => {
-                  logUserAction("priority.set", { priority: p });
-                  onSetPriority(p);
-                }}
+                onClick={() => { logUserAction("priority.set", { priority: p }); onSetPriority(p); }}
               >
                 <span className={`priority-dot priority-${p.toLowerCase()}`}></span>
                 {PRIORITY_LABELS[p]}
               </button>
             ))}
             <div className="dropdown-divider" />
-            <button
-              className="dropdown-item"
-              onClick={() => onSetPriority("P3" as Priority)}
-            >
+            <button className="dropdown-item" onClick={() => onSetPriority("P3" as Priority)}>
               清除
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <div className="priority-dropdown" title="导出">
-          <button className="tb-btn" disabled={!content}>
-            📤 导出 ▾
+        <div className="priority-dropdown">
+          <button className="tb-btn" title="导出" disabled={!content}>
+            导出 <span className="caret">▾</span>
           </button>
           <div className="dropdown-menu">
-            <button className="dropdown-item" onClick={onExportPng}>
-              📷 PNG 图片
-            </button>
-            <button className="dropdown-item" onClick={onExportSvg}>
-              📐 SVG 矢量
-            </button>
-            <button className="dropdown-item" onClick={onExportMarkdown}>
-              📝 Markdown (.md)
-            </button>
-            <button className="dropdown-item" onClick={onExportOpml}>
-              🌐 OPML (.opml)
-            </button>
+            <button className="dropdown-item" onClick={onExportPng}>PNG 图片</button>
+            <button className="dropdown-item" onClick={onExportSvg}>SVG 矢量</button>
+            <button className="dropdown-item" onClick={onExportMarkdown}>Markdown (.md)</button>
+            <button className="dropdown-item" onClick={onExportOpml}>OPML (.opml)</button>
           </div>
         </div>
-        <div className="priority-dropdown" title="导入">
-          <button className="tb-btn">
-            📥 导入 ▾
+        <div className="priority-dropdown">
+          <button className="tb-btn" title="导入">
+            导入 <span className="caret">▾</span>
           </button>
           <div className="dropdown-menu">
-            <button className="dropdown-item" onClick={onImportMarkdown}>
-              📝 Markdown (.md)
-            </button>
-            <button className="dropdown-item" onClick={onImportOpml}>
-              🌐 OPML (.opml)
-            </button>
+            <button className="dropdown-item" onClick={onImportMarkdown}>Markdown (.md)</button>
+            <button className="dropdown-item" onClick={onImportOpml}>OPML (.opml)</button>
           </div>
         </div>
-      </div>
 
-      <div className="toolbar-spacer" />
+        <div className="toolbar-spacer" />
 
-      <div className="toolbar-group">
-        <input
-          id="search-input"
-          type="text"
-          placeholder="搜索... (Cmd+F)"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onSearchNext();
-            if (e.key === "Escape") {
-              onSearchChange("");
-              (e.target as HTMLInputElement).blur();
-            }
-          }}
-          style={{
-            width: 160, padding: "3px 8px", fontSize: 12,
-            border: "1px solid #d1d1d1", borderRadius: 4, outline: "none",
-          }}
-        />
-        {searchResultCount > 0 && (
-          <span style={{ fontSize: 11, color: "#888", minWidth: 30 }}>
-            {searchCurrentIndex + 1}/{searchResultCount}
-          </span>
-        )}
-      </div>
-
-      <div className="toolbar-group">
-        <span className="tb-shortcut-hint">Tab=子 · Enter=兄 · F2=编辑 · Cmd+.=折叠</span>
-        <button className="tb-btn" onClick={onOpenPreferences} title="偏好设置">⚙</button>
-        {/* 子窗口专属:显示"关闭窗口"按钮(macOS 关闭按钮失效时的兜底) */}
-        {isChildWindow && (
-          <button
-            className="tb-btn"
-            onClick={async () => {
-              try {
-                const { getCurrentWindow } = await import("@tauri-apps/api/window");
-                await getCurrentWindow().destroy();
-              } catch (e) {
-                console.error("[Toolbar] 关闭窗口失败", e);
-                alert("关闭失败: " + e);
+        <div className="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="搜索节点…"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSearchNext();
+              if (e.key === "Escape") {
+                onSearchChange("");
+                (e.target as HTMLInputElement).blur();
               }
             }}
-            title="关闭此窗口(子窗口专用)"
-            style={{ color: "#e74c3c" }}
-          >
-            ✕
-          </button>
-        )}
+          />
+          {searchResultCount > 0 && (
+            <span className="search-count">{searchCurrentIndex + 1}/{searchResultCount}</span>
+          )}
+        </div>
+
+        {/* 拖动抓手:视觉标识窗口拖动区(Overlay 标题栏下唯一明确抓手) */}
+        <div className="tb-grip" data-tauri-drag-region title="拖动窗口" aria-label="拖动窗口" onMouseDown={dragWindow}></div>
       </div>
     </div>
   );

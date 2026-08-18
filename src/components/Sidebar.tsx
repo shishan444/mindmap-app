@@ -6,11 +6,11 @@ import TabStyle from "./TabStyle";
 import TabOutline from "./TabOutline";
 import "./Sidebar.css";
 
-const TABS: { id: SidebarTab; icon: string; label: string }[] = [
-  { id: "properties", icon: "📋", label: "面板" },
-  { id: "reminders", icon: "⏰", label: "提醒" },
-  { id: "style", icon: "🎨", label: "样式" },
-  { id: "outline", icon: "📋", label: "大纲" },
+const TABS: { id: SidebarTab; label: string; short: string }[] = [
+  { id: "properties", label: "面板", short: "面" },
+  { id: "reminders", label: "提醒", short: "提" },
+  { id: "style", label: "样式", short: "样" },
+  { id: "outline", label: "大纲", short: "纲" },
 ];
 
 export default function Sidebar() {
@@ -33,7 +33,7 @@ export default function Sidebar() {
               setActiveTab(t.id);
             }}
           >
-            {t.icon}
+            {t.short}
           </button>
         ))}
       </div>
@@ -50,7 +50,6 @@ export default function Sidebar() {
             onClick={() => setActiveTab(t.id)}
             title={t.label}
           >
-            <span className="sidebar-tab-icon-static">{t.icon}</span>
             <span className="sidebar-tab-label">{t.label}</span>
           </button>
         ))}

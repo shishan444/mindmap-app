@@ -333,6 +333,33 @@ function AppearanceTab({ draft, update }: TabProps) {
         />
       </label>
 
+      <label className="prefs-field">
+        <span>节点文字颜色</span>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type="color"
+            value={draft.ui.font_color || "#f2f4f7"}
+            onChange={(e) =>
+              update((c) => {
+                c.ui.font_color = e.target.value;
+              })
+            }
+            style={{ flex: 1, height: 30, cursor: "pointer" }}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              update((c) => {
+                c.ui.font_color = undefined;
+              })
+            }
+            title="恢复跟随主题默认色"
+          >
+            跟随主题
+          </button>
+        </div>
+      </label>
+
       <label className="prefs-field checkbox">
         <input
           type="checkbox"

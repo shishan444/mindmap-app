@@ -117,14 +117,15 @@ export default function TabProperties() {
   }
 
   // === 附加文件 ===
-  const fileTypeFilters: { type: FileType; label: string; Icon: any; exts: string[] }[] = [
-    { type: "image", label: "图片", Icon: ImageIcon, exts: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"] },
-    { type: "pdf", label: "PDF", Icon: FileType2, exts: ["pdf"] },
-    { type: "slide", label: "演示", Icon: Presentation, exts: ["ppt", "pptx", "key"] },
-    { type: "doc", label: "文档", Icon: FileDoc, exts: ["doc", "docx", "pages", "rtf", "txt", "md"] },
-    { type: "sheet", label: "表格", Icon: Sheet, exts: ["xls", "xlsx", "numbers", "csv"] },
-    { type: "video", label: "视频", Icon: Film, exts: ["mp4", "mov", "m4v", "avi", "mkv", "webm"] },
-    { type: "audio", label: "音频", Icon: Music, exts: ["mp3", "wav", "m4a", "aac", "flac", "ogg"] },
+  // 类型色与画布 attached-render 的类型编码同源(同一套色彩语言)
+  const fileTypeFilters: { type: FileType; label: string; Icon: any; exts: string[]; color: string }[] = [
+    { type: "image", label: "图片", Icon: ImageIcon, exts: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"], color: "#10b981" },
+    { type: "pdf", label: "PDF", Icon: FileType2, exts: ["pdf"], color: "#ef4444" },
+    { type: "slide", label: "演示", Icon: Presentation, exts: ["ppt", "pptx", "key"], color: "#f59e0b" },
+    { type: "doc", label: "文档", Icon: FileDoc, exts: ["doc", "docx", "pages", "rtf", "txt", "md"], color: "#3b82f6" },
+    { type: "sheet", label: "表格", Icon: Sheet, exts: ["xls", "xlsx", "numbers", "csv"], color: "#84cc16" },
+    { type: "video", label: "视频", Icon: Film, exts: ["mp4", "mov", "m4v", "avi", "mkv", "webm"], color: "#a855f7" },
+    { type: "audio", label: "音频", Icon: Music, exts: ["mp3", "wav", "m4a", "aac", "flac", "ogg"], color: "#ec4899" },
   ];
 
   const handleAttach = async (fileType: FileType, exts: string[]) => {
@@ -297,9 +298,9 @@ export default function TabProperties() {
 
   const btnStyle: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", gap: 4,
-    padding: "4px 8px", fontSize: 11,
-    border: "1px solid #d1d1d1", borderRadius: 4,
-    background: "#fff", color: "#666", cursor: "pointer",
+    padding: "4px 9px", fontSize: 11,
+    border: "1px solid var(--glass-border)", borderRadius: 8,
+    background: "rgba(255,255,255,0.05)", color: "var(--text-2)", cursor: "pointer",
   };
 
   // 优先级设置/清除
@@ -329,39 +330,65 @@ export default function TabProperties() {
     }
   };
 
+  // 节点路径面包屑(根→选中节点)
+  const findPath = (n: any, id: string, acc: string[] = []): string[] | null => {
+    if (!n?.id) return null;
+    const next = [...acc, n.topic || ""];
+    if (n.id === id) return next;
+    for (const c of n.children || []) {
+      const r = findPath(c, id, next);
+      if (r) return r;
+    }
+    return null;
+  };
+  const pathParts = content?.root ? (findPath(content.root, node.id) ?? []) : [];
+  const PRIORITY_BADGE: Record<string, string> = { P0: "P0 · 紧急", P1: "P1 · 高", P2: "P2 · 中", P3: "P3 · 低" };
+
   const currentIcons = node.icons || [];
 
   return (
     <div className="tab-pane">
-      {/* === 优先级 === */}
+      {/* === Hero 选中节点卡(视觉重心:徽章→标题→路径 三段式) === */}
+      <div className="panel-card hero-card">
+        <div className="hero-head">
+          {node.priority ? (
+            <span className={`hero-badge hero-badge-${node.priority.toLowerCase()}`}>
+              <span className={`priority-dot priority-${node.priority.toLowerCase()}`}></span>
+              {PRIORITY_BADGE[node.priority]}
+            </span>
+          ) : (
+            <span className="hero-badge hero-badge-none">未设优先级</span>
+          )}
+          <span className="hero-sub">已选中</span>
+        </div>
+        <div className="hero-title">{node.topic || "(无标题)"}</div>
+        {pathParts.length > 1 && (
+          <div className="hero-path">
+            {pathParts.slice(0, -1).map((t, i) => (
+              <span key={i}><span className="sep">/</span>{t}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* === 优先级:分段控件 === */}
       <div className="field">
         <span className="field-label">优先级</span>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div className="prio-seg">
           {(["P0", "P1", "P2", "P3"] as Priority[]).map((p) => {
-            const colors: Record<string, string> = {
-              P0: "#e74c3c", P1: "#f39c12", P2: "#f1c40f", P3: "#95a5a6",
-            };
             const isActive = node.priority === p;
             return (
               <button
                 key={p}
+                className={`prio-chip ${isActive ? "active" : ""} prio-seg-${p.toLowerCase()}`}
                 onClick={() => handlePriority(p)}
-                style={{
-                  flex: 1, padding: "5px 0", fontSize: 12, fontWeight: 600,
-                  border: isActive ? "none" : "1px solid #d1d1d1",
-                  borderRadius: 4, cursor: "pointer",
-                  background: isActive ? colors[p] : "#fff",
-                  color: isActive ? "#fff" : "#666",
-                  transition: "all 0.15s",
-                }}
               >
-                {p}
+                <span className={`priority-dot priority-${p.toLowerCase()}`}></span>{p}
               </button>
             );
           })}
         </div>
         {!node.priority && (
-          <span style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>点击设置优先级</span>
+          <span className="prio-hint">点击设置优先级</span>
         )}
       </div>
 
@@ -380,13 +407,13 @@ export default function TabProperties() {
                   title="点击移除"
                   style={{
                     display: "flex", alignItems: "center", gap: 3,
-                    padding: "3px 6px", background: "#f0f7ff",
-                    border: "1px solid #d0e0ee", borderRadius: 4,
-                    cursor: "pointer", fontSize: 11,
+                    padding: "3px 6px", background: "rgba(0,224,127,0.08)",
+                    border: "1px solid rgba(0,224,127,0.25)", borderRadius: 6,
+                    cursor: "pointer", fontSize: 11, color: "var(--text-2)",
                   }}
                 >
-                  {Icon ? <Icon size={14} color="#333" /> : <span>{emoji}</span>}
-                  <X size={10} color="#999" />
+                  {Icon ? <Icon size={14} color="var(--text-2)" /> : <span>{emoji}</span>}
+                  <X size={10} color="var(--text-4)" />
                 </div>
               );
             })}
@@ -394,10 +421,10 @@ export default function TabProperties() {
         )}
 
         {/* SVG 图标选择器(始终展示) */}
-        <div style={{ marginTop: 6, padding: 8, background: "#f9f9f9", borderRadius: 4, border: "1px solid #e8e8e8" }}>
+        <div style={{ marginTop: 6, padding: 8, background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid var(--glass-border-soft)" }}>
           {ICON_CATEGORIES.map((cat) => (
             <div key={cat.label} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "#888", marginBottom: 4, fontWeight: 600 }}>
+              <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4, fontWeight: 600 }}>
                 {cat.label}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
@@ -411,13 +438,13 @@ export default function TabProperties() {
                         style={{
                           width: 32, height: 32, display: "flex",
                           alignItems: "center", justifyContent: "center",
-                          border: selected ? "2px solid #4dc4ff" : "1px solid #e0e0e0",
-                          borderRadius: 4, cursor: "pointer",
-                          background: selected ? "#e8f4ff" : "#fff",
+                          border: selected ? "2px solid var(--accent)" : "1px solid var(--glass-border-soft)",
+                          borderRadius: 6, cursor: "pointer",
+                          background: selected ? "rgba(0,224,127,0.12)" : "rgba(255,255,255,0.04)",
                           transition: "all 0.1s",
                         }}
                       >
-                        <Icon size={16} color={selected ? "#4dc4ff" : "#666"} />
+                        <Icon size={16} color={selected ? "var(--accent)" : "var(--text-2)"} />
                       </button>
                     );
                   })}
@@ -433,15 +460,15 @@ export default function TabProperties() {
 
         {/* 已附加文件信息 + 操作 */}
         {node.attached_file ? (
-          <div style={{ padding: 8, background: "#f0f7ff", border: "1px solid #d0e0ee", borderRadius: 4, marginBottom: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#333", marginBottom: 4 }}>
+          <div style={{ padding: 10, background: "rgba(0,224,127,0.05)", border: "1px solid rgba(0,224,127,0.18)", borderRadius: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)", marginBottom: 4 }}>
               {node.attached_file.original_name}
             </div>
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>
               {formatSize(node.attached_file.size_bytes)} · {node.attached_file.ext.toUpperCase()}
             </div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              <button onClick={handleOpenAttached} title="用系统工具打开" style={btnStyle}>
+              <button onClick={handleOpenAttached} title="用系统工具打开" style={{ ...btnStyle, background: "rgba(0,224,127,0.14)", borderColor: "rgba(0,224,127,0.35)", color: "var(--accent)" }}>
                 <ExternalLink size={12} /> 打开
               </button>
               <button onClick={handleReplaceAttached} title="替换文件" style={btnStyle}>
@@ -450,7 +477,7 @@ export default function TabProperties() {
               <button onClick={handleReveal} title="在 Finder 中显示" style={btnStyle}>
                 <FolderOpen size={12} /> Finder
               </button>
-              <button onClick={handleRemoveAttached} title="移除附件" style={{ ...btnStyle, color: "#e74c3c" }}>
+              <button onClick={handleRemoveAttached} title="移除附件" style={{ ...btnStyle, color: "#ff8585" }}>
                 <Trash2 size={12} /> 移除
               </button>
             </div>
@@ -458,21 +485,24 @@ export default function TabProperties() {
         ) : null}
 
         {/* 文件类型选择器(点击 → 弹文件选择器) */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: 8, background: "#f9f9f9", borderRadius: 4, border: "1px solid #e8e8e8" }}>
-          {fileTypeFilters.map(({ type, label, Icon, exts }) => (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 8, background: "rgba(0,0,0,0.18)", borderRadius: 10, border: "1px solid var(--glass-border-soft)" }}>
+          {fileTypeFilters.map(({ type, label, Icon, exts, color }) => (
             <button
               key={type}
               onClick={() => handleAttach(type, exts)}
               title={`${label} (${exts.join(", ")})`}
               style={{
-                width: 36, height: 36, display: "flex",
+                width: 34, height: 34, display: "flex",
                 alignItems: "center", justifyContent: "center",
-                border: "1px solid #e0e0e0", borderRadius: 4,
-                cursor: "pointer", background: "#fff",
-                transition: "all 0.1s",
+                border: `1px solid ${color}55`, borderRadius: 8,
+                cursor: "pointer", background: `${color}1a`,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                transition: "all 0.15s",
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = `${color}30`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = `${color}1a`; }}
             >
-              <Icon size={18} color="#666" />
+              <Icon size={17} color={color} />
             </button>
           ))}
         </div>

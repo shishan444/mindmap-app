@@ -1,29 +1,61 @@
+/* 状态栏(毛玻璃悬浮细条) */
 .status-bar {
-  height: 24px;
+  position: relative;
+  height: 32px;
+  flex-shrink: 0;
+  margin-top: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  background: #ececec;
-  border-top: 1px solid #d1d1d1;
-  font-size: 11px;
-  color: #666;
+  padding: 0 14px;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 30%),
+    var(--noise),
+    var(--glass-lit);
+  backdrop-filter: var(--blur-panel);
+  -webkit-backdrop-filter: var(--blur-panel);
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  box-shadow: var(--e2), var(--glass-highlight);
+  font-size: 12px;
+  color: var(--text-3);
   user-select: none;
+}
+.status-bar::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: var(--edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .status-left,
 .status-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.status-left .status-item,
+.status-right .status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .status-divider {
-  color: #c0c0c0;
+  color: var(--text-4);
 }
 
 .status-save {
-  color: #555;
+  color: var(--text-2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
+.status-save.error {
+  color: #ff8585;
 }
 
 .status-file-path {
@@ -32,4 +64,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: rtl;
+}
+
+/* 已保存绿点 */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .status-bar {
+    background-image: none;
+    background-color: #1a1d24;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
 }

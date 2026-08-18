@@ -111,6 +111,31 @@ function buildLowerSandPath(ratio: number): string {
   return `M${cx - halfWidth} ${topY} L${cx + halfWidth} ${topY} L16 16.5 L4 16.5 Z`;
 }
 
+// === 优先级视觉同步 helper(module 顶层,init/re-init/change 后共用) ===
+// ★ 修复(首开丢优先级):mind-elixir init()/refresh() 重建 DOM 后 priority class 全部丢失,
+// 原实现只在 change 事件/undo-redo 路径同步;打开文档的首开路径(re-init)无人补 →
+// 节点优先级视觉(左色条+图标)消失。此函数供 re-init 与 needStoreToMindSync 两处复用。
+function syncPriorityStylesExternal(inst: any, state: any) {
+  if (!inst || !state.content) return;
+  const walk = (node: any) => {
+    if (!node?.id) return;
+    let tpc: any = null;
+    try {
+      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
+    } catch {
+      return;
+    }
+    if (tpc) {
+      tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
+      if (node.priority) {
+        tpc.classList.add(`priority-${node.priority.toLowerCase()}`);
+      }
+    }
+    for (const c of node.children || []) walk(c);
+  };
+  walk(state.content.root);
+}
+
 // === 附加文件渲染 helper ===
 // 按 attached_file.file_type 差异化渲染:
 // - image/pdf/slide/doc/sheet → 显示真实缩略图(<img>)
@@ -159,9 +184,11 @@ function syncAttachedFiles(inst: any, state: any) {
             const b64 = bytesToBase64(bytes);
             img.src = `data:image/png;base64,${b64}`;
           } else {
+            img.className = "attached-fallback";
             img.src = fileIconDataUri(attached.file_type);
           }
         }).catch(() => {
+          img.className = "attached-fallback";
           img.src = fileIconDataUri(attached.file_type);
         });
       } else {
@@ -169,8 +196,11 @@ function syncAttachedFiles(inst: any, state: any) {
       }
       render.appendChild(img);
     } else {
-      // 视频/音频/其他 — 显示类型图标
-      render.innerHTML = fileIconSvg(attached.file_type);
+      // 视频/音频/其他 — 类型图标装进玻璃徽章(与面板 file-type-badge 同构)
+      const badge = document.createElement("div");
+      badge.className = "attached-icon-badge";
+      badge.innerHTML = fileIconSvg(attached.file_type);
+      render.appendChild(badge);
     }
 
     // 扩展名角标(右下角小标签,显示 .PDF/.MP4 等,辅助识别)
@@ -189,21 +219,21 @@ function syncAttachedFiles(inst: any, state: any) {
   walk(state.content.root);
 }
 
-// 文件类型 → 内联 SVG(用于 video/audio/other)
+// 文件类型 → 内联 SVG(用于 video/audio/other,深色玻璃风格适配:细线+提亮色)
 function fileIconSvg(fileType: string): string {
   const colors: Record<string, string> = {
-    video: "#9b59b6",
-    audio: "#1abc9c",
-    other: "#95a5a6",
+    video: "#b98ce0",
+    audio: "#55d6c9",
+    other: "#9aa3ad",
   };
   const color = colors[fileType] || colors.other;
   if (fileType === "video") {
-    return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`;
+    return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`;
   }
   if (fileType === "audio") {
-    return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
+    return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
   }
-  return `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
 }
 
 function fileIconDataUri(fileType: string): string {
@@ -1056,7 +1086,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         };
 
         addItem({
-          label: "📝 添加子节点",
+          label: "添加子节点",
           action: async () => {
             await inst.addChild(tpc);
             setTimeout(() => {
@@ -1069,7 +1099,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           },
         });
         addItem({
-          label: "➕ 添加兄弟节点",
+          label: "添加兄弟节点",
           disabled: isRoot,
           action: async () => {
             if (isRoot) return;
@@ -1084,12 +1114,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           },
         });
         addItem({
-          label: "✏️ 编辑节点 (F2)",
+          label: "编辑节点 (F2)",
           action: () => inst.beginEdit(tpc),
         });
         addDivider();
         addItem({
-          label: "🗑 删除节点",
+          label: "删除节点",
           disabled: isRoot,
           action: () => {
             if (isRoot) return;
@@ -1113,7 +1143,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (attached && filePath) {
           addDivider();
           addItem({
-            label: "📂 打开(系统工具)",
+            label: "打开(系统工具)",
             action: () => {
               (window as any).__TAURI_INTERNALS__?.invoke("open_attached_file", {
                 mmapPath: filePath, nodeId,
@@ -1121,7 +1151,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             },
           });
           addItem({
-            label: "🔍 在 Finder 中显示",
+            label: "在 Finder 中显示",
             action: () => {
               (window as any).__TAURI_INTERNALS__?.invoke("reveal_attached_file", {
                 mmapPath: filePath, nodeId,
@@ -1129,7 +1159,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             },
           });
           addItem({
-            label: "🔄 替换附件...",
+            label: "替换附件...",
             action: async () => {
               try {
                 const { open } = await import("@tauri-apps/plugin-dialog");
@@ -1146,7 +1176,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
             },
           });
           addItem({
-            label: "❌ 移除附件",
+            label: "移除附件",
             action: async () => {
               try {
                 await (window as any).__TAURI_INTERNALS__?.invoke("remove_attached_file", {
@@ -1278,6 +1308,15 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     } catch (e) {
       console.error("[MindMapCanvas] re-init failed:", e);
     }
+    // ★ 修复(首开丢优先级):init 重建 DOM 后同步优先级/沙漏/附件三类视觉标记
+    setTimeout(() => {
+      const inst = instanceRef.current;
+      const state = useMindMapStore.getState();
+      if (!inst || !state.content) return;
+      syncPriorityStylesExternal(inst, state);
+      syncHourglassesExternal(inst, state);
+      syncAttachedFiles(inst, state);
+    }, 100);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content?.root.id]);
 
@@ -1302,23 +1341,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       const inst = instanceRef.current;
       const state = useMindMapStore.getState();
       if (!inst || !state.content) return;
-      const walk = (node: any) => {
-        if (!node?.id) return;
-        let tpc: any = null;
-        try {
-          tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
-        } catch {
-          return;
-        }
-        if (tpc) {
-          tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
-          if (node.priority) {
-            tpc.classList.add(`priority-${node.priority.toLowerCase()}`);
-          }
-        }
-        for (const c of node.children || []) walk(c);
-      };
-      walk(state.content.root);
+      syncPriorityStylesExternal(inst, state);
       // 沙漏也需要重绘
       syncHourglassesExternal(inst, state);
     }, 100);
@@ -1411,7 +1434,6 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       </div>
       {!content && (
         <div className="canvas-empty">
-          <div className="empty-icon">🧠</div>
           <p>暂未打开任何思维导图</p>
           <p className="empty-hint">点击菜单 文件 → 新建 或 打开 开始</p>
         </div>

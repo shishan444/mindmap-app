@@ -78,7 +78,7 @@ export default function TabStyle() {
           type="color"
           value={style.color || "#333333"}
           onChange={(e) => applyStyle("color", e.target.value)}
-          style={{ width: "100%", height: 30, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer" }}
+          style={{ width: "100%", height: 30, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)" }}
         />
       </div>
 
@@ -89,11 +89,11 @@ export default function TabStyle() {
             type="color"
             value={style.background || "#ffffff"}
             onChange={(e) => applyStyle("background", e.target.value)}
-            style={{ flex: 1, height: 30, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer" }}
+            style={{ flex: 1, height: 30, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)" }}
           />
           <button
             onClick={() => applyStyle("background", undefined)}
-            style={{ padding: "4px 8px", fontSize: 11, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer", background: "#fff" }}
+            style={{ padding: "4px 9px", fontSize: 11, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)", color: "var(--text-2)" }}
           >
             清除
           </button>
@@ -107,9 +107,9 @@ export default function TabStyle() {
             onClick={() => applyStyle("fontWeight", style.fontWeight === "bold" ? "normal" : "bold")}
             style={{
               flex: 1, padding: "4px 8px", fontSize: 12, cursor: "pointer",
-              border: "1px solid #d1d1d1", borderRadius: 4,
-              background: style.fontWeight === "bold" ? "#4dc4ff" : "#fff",
-              color: style.fontWeight === "bold" ? "#fff" : "#333",
+              border: style.fontWeight === "bold" ? "1px solid rgba(0,224,127,0.35)" : "1px solid var(--glass-border)", borderRadius: 8,
+              background: style.fontWeight === "bold" ? "rgba(0,224,127,0.14)" : "rgba(255,255,255,0.05)",
+              color: style.fontWeight === "bold" ? "var(--accent)" : "var(--text-2)",
               fontWeight: style.fontWeight === "bold" ? "bold" : "normal",
             }}
           >
@@ -119,9 +119,9 @@ export default function TabStyle() {
             onClick={() => applyStyle("textDecoration", style.textDecoration === "underline" ? undefined : "underline")}
             style={{
               flex: 1, padding: "4px 8px", fontSize: 12, cursor: "pointer",
-              border: "1px solid #d1d1d1", borderRadius: 4,
-              background: style.textDecoration === "underline" ? "#4dc4ff" : "#fff",
-              color: style.textDecoration === "underline" ? "#fff" : "#333",
+              border: style.textDecoration === "underline" ? "1px solid rgba(0,224,127,0.35)" : "1px solid var(--glass-border)", borderRadius: 8,
+              background: style.textDecoration === "underline" ? "rgba(0,224,127,0.14)" : "rgba(255,255,255,0.05)",
+              color: style.textDecoration === "underline" ? "var(--accent)" : "var(--text-2)",
               textDecoration: style.textDecoration === "underline" ? "underline" : "none",
             }}
           >
@@ -137,11 +137,11 @@ export default function TabStyle() {
             type="color"
             value={style.border?.match(/#[0-9a-f]{6}/i)?.[0] || "#cccccc"}
             onChange={(e) => applyStyle("border", `2px solid ${e.target.value}`)}
-            style={{ width: 40, height: 30, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer" }}
+            style={{ width: 40, height: 30, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)" }}
           />
           <button
             onClick={() => applyStyle("border", undefined)}
-            style={{ padding: "4px 8px", fontSize: 11, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer", background: "#fff" }}
+            style={{ padding: "4px 9px", fontSize: 11, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)", color: "var(--text-2)" }}
           >
             清除
           </button>
@@ -162,19 +162,19 @@ export default function TabStyle() {
         <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
           <button
             onClick={() => applyStyle("width", "fit-content")}
-            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer", background: style.width === "fit-content" ? "#e8f4ff" : "#fff" }}
+            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: style.width === "fit-content" ? "1px solid rgba(0,224,127,0.30)" : "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", color: "var(--text-2)", background: style.width === "fit-content" ? "rgba(0,224,127,0.12)" : "rgba(255,255,255,0.05)" }}
           >
             自动
           </button>
           <button
             onClick={() => applyStyle("width", "200px")}
-            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer", background: style.width === "200px" ? "#e8f4ff" : "#fff" }}
+            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: style.width === "200px" ? "1px solid rgba(0,224,127,0.30)" : "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", color: "var(--text-2)", background: style.width === "200px" ? "rgba(0,224,127,0.12)" : "rgba(255,255,255,0.05)" }}
           >
             固定 200px
           </button>
           <button
             onClick={() => applyStyle("width", undefined)}
-            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: "1px solid #d1d1d1", borderRadius: 4, cursor: "pointer", background: "#fff" }}
+            style={{ flex: 1, padding: "3px 6px", fontSize: 11, border: "1px solid var(--glass-border)", borderRadius: 8, cursor: "pointer", background: "rgba(255,255,255,0.05)", color: "var(--text-2)" }}
           >
             清除
           </button>
