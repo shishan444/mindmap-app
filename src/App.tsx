@@ -233,7 +233,20 @@ function App() {
         const { listen } = await import("@tauri-apps/api/event");
         un = await listen<string>("menu-action", (ev) => {
           try {
-            menuActionsRef.current[ev.payload]?.();
+            const id = ev.payload;
+            if (id.startsWith("open-recent:")) {
+              const st = useMindMapStore.getState();
+              void import("./utils/openRecentFile").then(({ openRecentFile }) =>
+                openRecentFile(id.slice("open-recent:".length), st.dirty, {
+                  invoke: invoke as any,
+                }).catch((e) => {
+                  console.error("[menu] 打开最近文件失败", e);
+                  alert("打开失败: " + e);
+                }),
+              );
+              return;
+            }
+            menuActionsRef.current[id]?.();
           } catch (err) {
             console.error("[menu] 动作执行失败", ev.payload, err);
           }
@@ -281,6 +294,7 @@ function App() {
       // 记录最近文件 + 创建新窗口
       await invoke("add_recent_file", { path: selected, name: title });
       await invoke("set_last_opened_file", { path: selected });
+      invoke("rebuild_menu").catch(() => {});   // 刷新系统菜单最近文件子菜单
       const dir = selected.split("/").slice(0, -1).join("/");
       await invoke("update_last_dirs", { openDir: dir, exportDir: null, importDir: null });
       await invoke("create_new_window", { mode: "open", mmapPath: selected });
@@ -331,6 +345,7 @@ function App() {
       const name = path.split("/").pop()?.replace(/\.mmap$/, "") || "未命名";
       await invoke("add_recent_file", { path, name });
       await invoke("set_last_opened_file", { path });
+      invoke("rebuild_menu").catch(() => {});   // 刷新系统菜单最近文件子菜单
     } catch (e) {
       console.error("[App] 保存失败", e);
       state.setSaveStatus("error");
@@ -625,13 +640,6 @@ function App() {
         onNew={handleNew}
         onOpen={handleOpen}
         onSave={handleSave}
-        onExportPng={handleExportPng}
-        onExportSvg={handleExportSvg}
-        onExportMarkdown={handleExportMarkdown}
-        onExportOpml={handleExportOpml}
-        onImportMarkdown={handleImportMarkdown}
-        onImportOpml={handleImportOpml}
-        onSetPriority={handleSetPriority}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         onSearchNext={handleSearchNext}

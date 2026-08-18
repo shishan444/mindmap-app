@@ -87,6 +87,7 @@ pub fn run() {
             let menu = build_app_menu(app)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().0.clone();
+                println!("[menu] 收到菜单事件: {}", id);
                 // 定向到焦点窗口(多窗口时菜单作用于当前文档)
                 let target = app
                     .webview_windows()
@@ -101,9 +102,11 @@ pub fn run() {
                     eprintln!("[menu] 动作事件发送失败: {}", e);
                 }
             });
-            if let Some(main) = app.get_webview_window("main") {
-                main.set_menu(menu)?;
-            }
+            // ★ 根因修复:macOS 上 window.set_menu 不受支持(菜单只进 stash,
+            // 不挂 NSApp mainMenu → 系统菜单栏一直是 AppKit 默认空壳)。
+            // 必须用 AppHandle/Manager 级 set_menu(app-wide)。
+            app.set_menu(menu)?;
+            println!("[menu] app 级菜单已挂载(macOS NSApp mainMenu)");
 
 
             // === 初始化全局共享状态(AppState) ===
@@ -280,6 +283,7 @@ pub fn run() {
         })
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
+            commands::rebuild_menu,
             commands::get_config,
             commands::save_config_command,
             commands::get_app_data_dir,
@@ -466,8 +470,8 @@ fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
 /// 设计决策:F2 单导航修正 — 删除窗口内 HTML 菜单栏,菜单能力移到系统级,
 /// 免费获得原生外观/行为与全局快捷键;动作通过 menu-action 事件桥接到前端。
 /// 注意:撤销/重做不绑 accelerator — 前端已有 Cmd+Z 监听,避免双触发。
-fn build_app_menu(
-    app: &mut tauri::App,
+pub(crate) fn build_app_menu<M: tauri::Manager<tauri::Wry>>(
+    app: &M,
 ) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
     let sep = PredefinedMenuItem::separator(app)?;
 
@@ -488,6 +492,29 @@ fn build_app_menu(
     let f_new = MenuItem::with_id(app, "new", "新建文档", true, Some("cmdOrCtrl+n"))?;
     let f_open = MenuItem::with_id(app, "open", "打开…", true, Some("cmdOrCtrl+o"))?;
     let f_save = MenuItem::with_id(app, "save", "保存", true, Some("cmdOrCtrl+s"))?;
+    // 最近文件动态子菜单(id 编码路径: open-recent:<path>)
+    let mut recent_menu_items: Vec<MenuItem<tauri::Wry>> = Vec::new();
+    if let Ok(rf) = crate::config::load_recent_files() {
+        for f in rf.files.iter().take(5) {
+            if let Ok(mi) = MenuItem::with_id(
+                app,
+                &format!("open-recent:{}", f.path),
+                &f.name,
+                true,
+                None::<&str>,
+            ) {
+                recent_menu_items.push(mi);
+            }
+        }
+    }
+    use tauri::menu::IsMenuItem;
+    let f_recent: Submenu<tauri::Wry> = if recent_menu_items.is_empty() {
+        let empty: &[&dyn IsMenuItem<tauri::Wry>] = &[];
+        Submenu::with_id_and_items(app, "recent", "打开最近文件", false, empty)?
+    } else {
+        let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = recent_menu_items.iter().map(|m| m as &dyn IsMenuItem<tauri::Wry>).collect();
+        Submenu::with_id_and_items(app, "recent", "打开最近文件", true, &refs)?
+    };
     let f_png = MenuItem::with_id(app, "export-png", "导出 PNG 图片", true, None::<&str>)?;
     let f_svg = MenuItem::with_id(app, "export-svg", "导出 SVG 矢量", true, None::<&str>)?;
     let f_md = MenuItem::with_id(app, "export-markdown", "导出 Markdown", true, None::<&str>)?;
@@ -502,8 +529,8 @@ fn build_app_menu(
         "文件",
         true,
         &[
-            &f_new, &f_open, &f_save, &sep2, &f_png, &f_svg, &f_md, &f_opml, &sep3, &f_imd,
-            &f_iopml,
+            &f_new, &f_open, &f_recent, &f_save, &sep2, &f_png, &f_svg, &f_md, &f_opml, &sep3,
+            &f_imd, &f_iopml,
         ],
     )?;
 
@@ -513,12 +540,20 @@ fn build_app_menu(
     let e_edit = MenuItem::with_id(app, "edit-text", "编辑节点文本", true, None::<&str>)?;
     let e_del = MenuItem::with_id(app, "delete-node", "删除节点", true, None::<&str>)?;
     let sep4 = PredefinedMenuItem::separator(app)?;
+    let pre_cut = PredefinedMenuItem::cut(app, None)?;
+    let pre_copy = PredefinedMenuItem::copy(app, None)?;
+    let pre_paste = PredefinedMenuItem::paste(app, None)?;
+    let pre_select_all = PredefinedMenuItem::select_all(app, None)?;
+    let sep4b = PredefinedMenuItem::separator(app)?;
     let edit_menu = Submenu::with_id_and_items(
         app,
         "edit",
         "编辑",
         true,
-        &[&e_undo, &e_redo, &sep4, &e_edit, &e_del],
+        &[
+            &e_undo, &e_redo, &sep4, &pre_cut, &pre_copy, &pre_paste, &pre_select_all, &sep4b,
+            &e_edit, &e_del,
+        ],
     )?;
 
     // 视图
@@ -548,12 +583,24 @@ fn build_app_menu(
         &[&i_child, &i_sib, &sep5, &p0, &p1, &p2, &p3],
     )?;
 
+    // 窗口(系统预定义:最小化/缩放)
+    let pre_minimize = PredefinedMenuItem::minimize(app, None)?;
+    let pre_maximize = PredefinedMenuItem::maximize(app, None)?;
+    let window_menu = Submenu::with_id_and_items(
+        app,
+        "windowmenu",
+        "窗口",
+        true,
+        &[&pre_minimize, &pre_maximize],
+    )?;
+
     // 帮助
     let h_about = MenuItem::with_id(app, "about", "关于 思维导图", true, None::<&str>)?;
     let help_menu = Submenu::with_id_and_items(app, "help", "帮助", true, &[&h_about])?;
 
     Ok(Menu::with_items(
         app,
-        &[&app_menu, &file_menu, &edit_menu, &view_menu, &insert_menu, &help_menu],
+        &[&app_menu, &file_menu, &edit_menu, &view_menu, &insert_menu, &window_menu, &help_menu],
     )?)
 }
+

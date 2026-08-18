@@ -647,3 +647,12 @@ fn url_encode_path(s: &str) -> String {
         })
         .collect()
 }
+
+
+/// 重建应用菜单(最近文件变化后由前端调用,刷新"打开最近文件"子菜单)
+#[tauri::command]
+pub fn rebuild_menu(app: tauri::AppHandle) -> std::result::Result<(), String> {
+    let menu = crate::build_app_menu(&app).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
+    Ok(())
+}
