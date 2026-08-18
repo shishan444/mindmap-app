@@ -1,79 +1,50 @@
-.prefs-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.prefs-modal {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
-  width: 600px;
-  max-width: 90vw;
-  max-height: 80vh;
+/* 偏好设置(独立原生窗口内容:窗口即面板,标题栏由系统承担) */
+.prefs-window {
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  background: var(--bg-gradient);
+  color: var(--text-1);
+}
+.prefs-loading {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--text-3); font-size: 13px;
 }
 
-.prefs-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid #e0e0e0;
-}
 
-.prefs-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
 
-.prefs-close {
-  border: none;
-  background: transparent;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 0;
-  line-height: 1;
-}
-
-.prefs-close:hover {
-  color: #333;
-}
-
+/* tabs(与侧栏 tab 同构:accent 下划线) */
 .prefs-tabs {
   display: flex;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 0 12px;
+  border-bottom: 1px solid var(--glass-border-soft);
+  padding: 0 8px;
+  flex-shrink: 0;
 }
 
 .prefs-tab {
-  padding: 10px 16px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  color: #555;
+  font-family: inherit;
+  color: var(--text-3);
   border-bottom: 2px solid transparent;
   display: flex;
   align-items: center;
   gap: 6px;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .prefs-tab:hover {
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
 }
 
 .prefs-tab.active {
-  color: #1a73e8;
-  border-bottom-color: #1a73e8;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  text-shadow: 0 0 14px rgba(0, 224, 127, 0.45);
 }
 
 .prefs-tab-icon {
@@ -81,16 +52,23 @@
 }
 
 .prefs-content {
-  padding: 20px;
+  padding: 16px 18px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+}
+.prefs-content::-webkit-scrollbar { width: 8px; }
+.prefs-content::-webkit-scrollbar-track { background: transparent; }
+.prefs-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 4px; border: 2px solid transparent; background-clip: content-box;
 }
 
 .prefs-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 5px;
+  margin-bottom: 12px;
 }
 
 .prefs-field.checkbox {
@@ -102,75 +80,105 @@
 .prefs-field.checkbox input[type="checkbox"] {
   width: 16px;
   height: 16px;
+  accent-color: var(--accent);
 }
 
 .prefs-field span {
   font-size: 12px;
-  color: #666;
+  color: var(--text-3);
   font-weight: 500;
 }
 
 .prefs-field input[type="text"],
 .prefs-field input[type="number"],
 .prefs-field select {
-  padding: 6px 10px;
-  border: 1px solid #d1d1d1;
-  border-radius: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
   font-size: 13px;
-  outline: none;
   font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
 .prefs-field input:focus,
 .prefs-field select:focus {
-  border-color: #1a73e8;
+  border-color: rgba(0, 224, 127, 0.45);
+  box-shadow: 0 0 0 3px rgba(0, 224, 127, 0.12);
+}
+
+.prefs-field input[type="color"] {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
 }
 
 .prefs-error {
   padding: 8px 16px;
-  background: #fff5f5;
-  color: #c00;
+  background: rgba(255, 92, 92, 0.10);
+  color: #ff8585;
   font-size: 12px;
-  border-top: 1px solid #ffe0e0;
+  border-top: 1px solid rgba(255, 92, 92, 0.25);
 }
 
 .prefs-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid #e0e0e0;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--glass-border-soft);
+  flex-shrink: 0;
 }
 
 .prefs-btn-cancel,
 .prefs-btn-save {
-  padding: 8px 18px;
-  border-radius: 6px;
+  height: 32px;
+  padding: 0 18px;
+  border-radius: var(--radius-s);
   cursor: pointer;
   font-size: 13px;
+  font-family: inherit;
   border: 1px solid transparent;
 }
 
 .prefs-btn-cancel {
-  background: transparent;
-  border-color: #d1d1d1;
-  color: #555;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-highlight);
+  color: var(--text-2);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .prefs-btn-cancel:hover {
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-1);
 }
 
 .prefs-btn-save {
-  background: #1a73e8;
-  color: white;
+  background: linear-gradient(180deg, #0cf296 0%, #00c873 100%);
+  color: #06281a;
+  font-weight: 600;
+  box-shadow: 0 0 24px var(--accent-glow), 0 4px 12px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.40);
+  transition: box-shadow 0.15s var(--ease);
 }
 
 .prefs-btn-save:hover:not(:disabled) {
-  background: #1557b8;
+  box-shadow: 0 0 36px var(--accent-glow), 0 4px 12px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.40);
 }
 
 .prefs-btn-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .prefs-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .prefs-modal {
+    background-image: none;
+    background-color: #1a1d24;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
 }

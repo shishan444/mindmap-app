@@ -88,12 +88,15 @@ pub fn run() {
             app.on_menu_event(|app, event| {
                 let id = event.id().0.clone();
                 println!("[menu] 收到菜单事件: {}", id);
-                // 定向到焦点窗口(多窗口时菜单作用于当前文档)
+                // 定向到焦点窗口(多窗口时菜单作用于当前文档)。
+                // 例外:偏好设置窗口不消费菜单动作(它不渲染主 App/listener),
+                // 此时广播,由主文档窗口响应——修复焦点在偏好窗口时菜单静默失效。
                 let target = app
                     .webview_windows()
                     .into_iter()
                     .find(|(_, w)| w.is_focused().unwrap_or(false))
-                    .map(|(_, w)| w.label().to_string());
+                    .map(|(_, w)| w.label().to_string())
+                    .filter(|l| l != "preferences");
                 let emit_result = match target {
                     Some(label) => app.emit_to(&label, "menu-action", id),
                     None => app.emit("menu-action", id),
@@ -284,6 +287,7 @@ pub fn run() {
         .on_window_event(handle_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::rebuild_menu,
+            commands::open_preference_window,
             commands::get_config,
             commands::save_config_command,
             commands::get_app_data_dir,

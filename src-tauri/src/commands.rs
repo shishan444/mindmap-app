@@ -656,3 +656,29 @@ pub fn rebuild_menu(app: tauri::AppHandle) -> std::result::Result<(), String> {
     app.set_menu(menu).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+/// 打开偏好设置(独立原生窗口,与主窗口分离可拖动;单例已开则置焦)
+/// 行业惯例:macOS Preferences 为独立 NSWindow,非窗口内 overlay。
+#[tauri::command]
+pub fn open_preference_window(app: tauri::AppHandle) -> Result<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(w) = app.get_webview_window("preferences") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let window = WebviewWindowBuilder::new(
+        &app,
+        "preferences",
+        WebviewUrl::App("/?view=preferences".into()),
+    )
+    .title("偏好设置")
+    .inner_size(480.0, 580.0)
+    .min_inner_size(420.0, 460.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|e| AppError::Other(format!("创建偏好设置窗口失败: {}", e)))?;
+    let _ = window.set_focus();
+    Ok(())
+}

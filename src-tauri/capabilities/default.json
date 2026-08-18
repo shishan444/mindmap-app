@@ -21,6 +21,8 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:webview:default",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "core:window:allow-destroy",
+    "core:window:allow-set-title"
   ]
 }

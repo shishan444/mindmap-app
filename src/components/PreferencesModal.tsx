@@ -1,49 +1,57 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useMindMapStore } from "../store";
 import type { Config } from "../types";
 import "./PreferencesModal.css";
 
 type Tab = "general" | "reminder" | "appearance" | "export" | "mcp";
 
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "general", icon: "⚙", label: "通用" },
-  { id: "reminder", icon: "⏰", label: "提醒" },
-  { id: "appearance", icon: "🎨", label: "外观" },
-  { id: "export", icon: "📤", label: "导出" },
-  { id: "mcp", icon: "🤖", label: "MCP" },
+const TABS: { id: Tab; label: string }[] = [
+  { id: "general", label: "通用" },
+  { id: "reminder", label: "提醒" },
+  { id: "appearance", label: "外观" },
+  { id: "export", label: "导出" },
+  { id: "mcp", label: "MCP" },
 ];
 
-export default function PreferencesModal() {
-  const show = useMindMapStore((s) => s.showPreferences);
-  const close = useMindMapStore((s) => s.closePreferences);
-  const config = useMindMapStore((s) => s.config);
-  const replaceConfig = useMindMapStore((s) => s.replaceConfig);
-
+export default function PreferencesView() {
+  // 独立偏好设置窗口内容(原窗口内模态已废弃:overlay 形态与主 UI 不分离、
+  // 不可独立拖动,不符合桌面惯例)。config 由本窗口自行拉取,不经主窗口 store。
   const [draft, setDraft] = useState<Config | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (show && config) {
-      // 深克隆做编辑副本
-      setDraft(JSON.parse(JSON.stringify(config)));
-      setError(null);
+  const closeWindow = async () => {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().destroy();
+    } catch (e) {
+      console.error("[prefs] 关闭窗口失败(检查 allow-destroy 权限)", e);
     }
-  }, [show, config]);
+  };
 
-  // Esc 关闭(满足 escape-routes:模态必须提供取消/退出途径)
   useEffect(() => {
-    if (!show) return;
+    invoke<Config>("get_config")
+      .then((c) => setDraft(c))
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  // Esc 关窗(escape-routes)
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") void closeWindow();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [show, close]);
+  }, []);
 
-  if (!show || !draft) return null;
+  if (!draft) {
+    return (
+      <div className="prefs-window">
+        <div className="prefs-loading">{error ? "配置加载失败" : "加载中…"}</div>
+      </div>
+    );
+  }
 
   const update = (path: (cfg: Config) => void) => {
     setDraft((prev) => {
@@ -60,8 +68,12 @@ export default function PreferencesModal() {
     setError(null);
     try {
       await invoke("save_config_command", { cfg: draft });
-      replaceConfig(draft);
-      close();
+      // 通知主窗口刷新 config(节点默认样式等即时生效)
+      try {
+        const { emit } = await import("@tauri-apps/api/event");
+        await emit("prefs-updated");
+      } catch { /* 忽略 */ }
+      await closeWindow();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -69,72 +81,49 @@ export default function PreferencesModal() {
     }
   };
 
-  const handleCancel = () => {
-    close();
-  };
-
   return (
-    <div className="prefs-overlay" onClick={handleCancel}>
-      <div
-        className="prefs-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="偏好设置"
-      >
-        <div className="prefs-header">
-          <h2>偏好设置</h2>
+    <div className="prefs-window">
+      <div className="prefs-tabs">
+        {TABS.map((t) => (
           <button
-            className="prefs-close"
-            onClick={handleCancel}
-            aria-label="关闭"
+            key={t.id}
+            className={`prefs-tab ${activeTab === t.id ? "active" : ""}`}
+            onClick={() => setActiveTab(t.id)}
           >
-            ×
+            <span>{t.label}</span>
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div className="prefs-tabs">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className={`prefs-tab ${activeTab === t.id ? "active" : ""}`}
-              onClick={() => setActiveTab(t.id)}
-            >
-              <span className="prefs-tab-icon">{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
-          ))}
-        </div>
+      <div className="prefs-content">
+        {activeTab === "general" && (
+          <GeneralTab draft={draft} update={update} />
+        )}
+        {activeTab === "reminder" && (
+          <ReminderTab draft={draft} update={update} />
+        )}
+        {activeTab === "appearance" && (
+          <AppearanceTab draft={draft} update={update} />
+        )}
+        {activeTab === "export" && (
+          <ExportTab draft={draft} update={update} />
+        )}
+        {activeTab === "mcp" && <McpTab draft={draft} update={update} />}
+      </div>
 
-        <div className="prefs-content">
-          {activeTab === "general" && (
-            <GeneralTab draft={draft} update={update} />
-          )}
-          {activeTab === "reminder" && (
-            <ReminderTab draft={draft} update={update} />
-          )}
-          {activeTab === "appearance" && (
-            <AppearanceTab draft={draft} update={update} />
-          )}
-          {activeTab === "export" && (
-            <ExportTab draft={draft} update={update} />
-          )}
-          {activeTab === "mcp" && <McpTab draft={draft} update={update} />}
-        </div>
+      {error && <div className="prefs-error">{error}</div>}
 
-        {error && <div className="prefs-error">{error}</div>}
-
-        <div className="prefs-footer">
-          <button className="prefs-btn-cancel" onClick={handleCancel}>
-            取消
-          </button>
-          <button
-            className="prefs-btn-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        </div>
+      <div className="prefs-footer">
+        <button className="prefs-btn-cancel" onClick={() => void closeWindow()}>
+          取消
+        </button>
+        <button
+          className="prefs-btn-save"
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? "保存中..." : "保存"}
+        </button>
       </div>
     </div>
   );

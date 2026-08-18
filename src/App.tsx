@@ -6,7 +6,6 @@ import Toolbar from "./components/Toolbar";
 import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
-import PreferencesModal from "./components/PreferencesModal";
 import AboutModal from "./components/AboutModal";
 import ReminderToast from "./components/ReminderToast";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
@@ -231,6 +230,12 @@ function App() {
     (async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
+        un = await listen<string>("prefs-updated", async () => {
+          try {
+            const cfg = await invoke<Config>("get_config");
+            setConfig(cfg);
+          } catch { /* 忽略 */ }
+        });
         un = await listen<string>("menu-action", (ev) => {
           try {
             const id = ev.payload;
@@ -592,7 +597,7 @@ function App() {
     "prio-p2": () => handleSetPriority("P2"),
     "prio-p3": () => handleSetPriority("P3"),
     about: () => setAboutOpen(true),
-    prefs: () => useMindMapStore.getState().openPreferences(),
+    prefs: () => { invoke("open_preference_window").catch((e) => console.error("[menu] 打开偏好设置失败", e)); },
     undo: () => undo(),
     redo: () => redo(),
     "toggle-sidebar": () => useMindMapStore.getState().toggleSidebar(),
@@ -655,7 +660,6 @@ function App() {
         <Sidebar />
       </div>
       <StatusBar />
-      <PreferencesModal />
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ReminderToast />
       <LlmSessionBanner />
