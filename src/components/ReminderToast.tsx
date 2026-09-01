@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
@@ -110,7 +111,9 @@ export default function ReminderToast() {
 
   if (toasts.length === 0) return null;
 
-  return (
+  // ★ 根因修复(浮层布局劫持):同 LlmOperationHistory — Portal 挂 body,
+  // 免疫 `.app-root > *:not(.stage-fx)` 的 position:relative 覆盖。
+  return createPortal(
     <div className="reminder-toast-container">
       {toasts.map((t) => (
         <div
@@ -122,7 +125,12 @@ export default function ReminderToast() {
             dismiss(t.id);
           }}
         >
-          <div className="reminder-toast-icon">⏰</div>
+          <div className="reminder-toast-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </div>
           <div className="reminder-toast-body">
             <div className="reminder-toast-title">{t.reminder.title}</div>
             {t.reminder.message && (
@@ -141,6 +149,7 @@ export default function ReminderToast() {
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

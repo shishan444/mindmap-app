@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
 import "./LlmSessionBanner.css";
@@ -57,13 +58,21 @@ export default function LlmSessionBanner() {
 
   const isUrgent = remainingSec <= 10;
 
-  return (
+  // ★ 根因修复(浮层布局劫持):同 LlmOperationHistory — Portal 挂 body,
+  // 免疫 `.app-root > *:not(.stage-fx)` 的 position:relative 覆盖。
+  return createPortal(
     <div
       className={`llm-banner ${isUrgent ? "llm-banner-urgent" : ""} ${!session ? "llm-banner-fading" : ""}`}
       role="status"
       aria-live="polite"
     >
-      <span className="llm-banner-icon">🤖</span>
+      <span className="llm-banner-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="8" width="16" height="12" rx="3" />
+          <path d="M12 8V4M8 4h8" />
+          <path d="M9 13v2M15 13v2" />
+        </svg>
+      </span>
       <span className="llm-banner-text">
         {session ? (
           <>
@@ -76,13 +85,14 @@ export default function LlmSessionBanner() {
       </span>
       {session && (
         <button className="llm-banner-takeover" onClick={handleTakeOver} title="中断 LLM,立即恢复编辑">
-          ✋ 接管
+          接管
         </button>
       )}
       <button className="llm-banner-close" onClick={handleClose} title="关闭提示">
-        ✕
+        ×
       </button>
       {error && <span className="llm-banner-error">{error}</span>}
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,74 +1,152 @@
+/* ============================================================
+   LlmOperationHistory — LLM 操作历史浮层(毛玻璃设计系统)
+   系列修复(浮层从底栏升起画布 bug):
+   1. 定位:右侧悬浮,脱离底栏锚点 — 原 bottom:36px 贴底栏(注释自证
+      "状态栏上方"),280px×320px 白底面板视觉像"从底栏升起的新画布";
+      改 bottom:64px + elevation e3,悬浮于内容之上
+   2. 视觉:七层玻璃构造(tokens.css 同源) — 原为白底紫渐变旧亮色体系
+   ============================================================ */
+
 .llm-history-panel {
   position: fixed;
-  right: 12px;
-  bottom: 36px; /* 状态栏上方 */
-  width: 280px;
-  max-height: 320px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(167, 139, 250, 0.4);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(76, 29, 149, 0.18);
+  right: 24px;
+  bottom: 64px; /* ★ 系列修复:脱离底栏锚点,悬浮于画布之上 */
+  width: 300px;
+  max-height: 360px;
   z-index: 900;
-  font-size: 12px;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-m);
+  background: var(--glass-float-base);
+  backdrop-filter: var(--blur-float);
+  -webkit-backdrop-filter: var(--blur-float);
+  box-shadow: var(--e3);
+  font-size: 12px;
+  animation: float-in 0.3s var(--ease);
 }
 
+/* L2 透光渐变 + L3 磨砂噪点 */
+.llm-history-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-lit), var(--noise);
+  pointer-events: none;
+}
+
+/* L4 渐变描边(mask 技术) */
+.llm-history-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@keyframes float-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* header:玻璃 tint 分区(LLM 语义紫,呼应舞台左上紫光斑)+ 上缘受光 */
 .llm-history-header {
+  position: relative;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background: linear-gradient(90deg, #4c1d95 0%, #1e3a8a 100%);
-  color: white;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.14) 0%, rgba(167, 139, 250, 0.05) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: var(--text-1);
   font-weight: 600;
 }
 
+.llm-history-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
+.llm-history-title svg {
+  color: #b7a3f5;
+  flex-shrink: 0;
+}
+
 .llm-history-count {
-  background: rgba(255, 255, 255, 0.25);
-  padding: 1px 8px;
-  border-radius: 8px;
+  background: rgba(167, 139, 250, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  color: #cabdfb;
+  padding: 1px 9px;
+  border-radius: 9px;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .llm-history-list {
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 4px 0;
   overflow-y: auto;
   flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.llm-history-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.llm-history-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
 }
 
 .llm-history-item {
+  position: relative;
   display: grid;
-  grid-template-columns: 20px 60px 1fr auto;
+  grid-template-columns: 20px 62px 1fr auto;
   gap: 6px;
   align-items: center;
-  padding: 5px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #374151;
+  padding: 6px 14px;
+  color: var(--text-2);
 }
 
 .llm-history-item:hover {
-  background: #f9fafb;
-}
-
-.llm-history-item:last-child {
-  border-bottom: none;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .llm-history-icon {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  color: var(--text-3);
+}
+
+.llm-history-icon svg {
+  flex-shrink: 0;
 }
 
 .llm-history-label {
-  color: #6b7280;
+  color: var(--text-3);
   font-size: 11px;
 }
 
 .llm-history-detail {
-  color: #111827;
+  color: var(--text-1);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -76,7 +154,7 @@
 }
 
 .llm-history-time {
-  color: #9ca3af;
+  color: var(--text-4);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -85,41 +163,47 @@
   margin-left: auto;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-3);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.15s;
+  font-size: 13px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .llm-history-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-1);
 }
 
 .llm-history-footer {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
-  border-top: 1px solid #f3f4f6;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .llm-history-more {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  color: #6b7280;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
   font-size: 11px;
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .llm-history-more:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-1);
 }
 
 .llm-history-pager {
@@ -127,21 +211,30 @@
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .llm-history-pager button {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  color: #6b7280;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
   font-size: 12px;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease);
+}
+
+.llm-history-pager button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.10);
 }
 
 .llm-history-pager button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
 }

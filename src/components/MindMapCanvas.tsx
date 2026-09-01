@@ -15,10 +15,24 @@ import {
 import { computeNodeReminderState } from "../utils/reminderState";
 import { computeDropZone, computePlaceholderRectFromActual, computeSiblingShift, buildConnectionLinePath, executeDrop, type DropZone } from "../utils/dragDrop";
 import { isEditingSession, shouldBlockDefaultDrag, shouldReSelectAfterDrop } from "../utils/editGuard";
+import { log } from "../utils/devLogger";
 import "./MindMapCanvas.css";
 
 interface Props {
   onCreateInstance?: (mind: any) => void;
+}
+
+// ★ 诊断插桩 helper:焦点目标的紧凑描述(tag#id.class)
+// 用于 Tab/Enter 快捷键失效根因取证(纯观测,生产模式 log() 静默)
+function describeFocusTarget(el: Element | null): string {
+  if (!el) return "null";
+  const tag = el.tagName.toLowerCase();
+  const id = el.id ? `#${el.id}` : "";
+  const cls =
+    el instanceof HTMLElement && el.className
+      ? `.${String(el.className).trim().split(/\s+/).slice(0, 2).join(".")}`
+      : "";
+  return `${tag}${id}${cls}`;
 }
 
 // === 沙漏渲染 helper(module 顶层,多 useEffect 共享) ===
@@ -446,6 +460,9 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     let onContextMenu: ((e: MouseEvent) => void) | null = null;
     let onDocClickCloseMenu: ((e: MouseEvent) => void) | null = null;
     let contextMenuCleanup: (() => void) | null = null;
+    // ★ 诊断插桩:焦点翻转监听(声明提级,cleanup 需要)
+    let onFocusInProbe: (() => void) | null = null;
+    let onFocusOutProbe: (() => void) | null = null;
 
     if (inner) {
       inner.setAttribute("tabindex", "0");
@@ -582,15 +599,38 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
 
       onFallbackKey = (e: KeyboardEvent) => {
         const ae = document.activeElement;
+        // ★ 诊断插桩:Tab/Enter/F2 失效根因取证(纯观测,不改行为;仅 dev 生效)
+        const dbgKey = import.meta.env.DEV && ["Tab", "Enter", "F2"].includes(e.key);
+        if (dbgKey) {
+          log({
+            cat: "mind-elixir", op: "kbd.probe",
+            payload: {
+              key: e.key,
+              ae: describeFocusTarget(ae),
+              editable: !!(ae as HTMLElement | null)?.isContentEditable,
+              inCanvas: !!(ae instanceof HTMLElement && ae.closest(".mind-elixir-inner, .map-container, me-tpc, me-root, me-main, me-parent, me-wrapper")),
+              selected: !!inner.querySelector("me-tpc.selected"),
+              currentNodesLen: Array.isArray(instanceRef.current?.currentNodes)
+                ? instanceRef.current.currentNodes.length
+                : -1,
+            },
+          });
+        }
         // 编辑模式（input-box / contenteditable）不拦截
-        if (ae && (ae as HTMLElement).isContentEditable) return;
+        if (ae && (ae as HTMLElement).isContentEditable) {
+          if (dbgKey) log({ cat: "mind-elixir", op: "kbd.skip-editing", payload: { key: e.key, ae: describeFocusTarget(ae) } });
+          return;
+        }
 
         // 只在画布区域拦截（焦点在 map-container / me-tpc / inner 内）
         // 否则 Tab 会跳到侧边栏等其他 focusable 元素
         const inCanvas = ae instanceof HTMLElement
           ? !!ae.closest(".mind-elixir-inner, .map-container, me-tpc, me-root, me-main, me-parent, me-wrapper")
           : false;
-        if (!inCanvas) return;
+        if (!inCanvas) {
+          if (dbgKey) log({ cat: "mind-elixir", op: "kbd.skip-not-in-canvas", payload: { key: e.key, ae: describeFocusTarget(ae) } });
+          return;
+        }
 
         const inst = instanceRef.current;
         if (!inst) return;
@@ -624,9 +664,13 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         e.preventDefault();
 
         const selected = getSelected();
-        if (!selected) return;
+        if (!selected) {
+          if (dbgKey) log({ cat: "mind-elixir", op: "kbd.skip-no-selected", payload: { key: e.key } });
+          return;
+        }
 
         const isRoot = selected.tagName === "ME-ROOT";
+        if (dbgKey) log({ cat: "mind-elixir", op: "kbd.handled", payload: { key: e.key, isRoot } });
         let opChanged = false;
         try {
           switch (e.key) {
@@ -639,7 +683,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
                 // 关键：blur 后恢复焦点到 map-container，否则焦点丢到 body，
                 // 后续 Tab/Enter/F2 检查 inCanvas 失败 → 不处理
                 const mc = document.querySelector(".map-container") as HTMLElement | null;
-                if (mc) mc.focus();
+                if (mc) {
+                  mc.focus();
+                  if (import.meta.env.DEV) log({ cat: "state", op: "focus.restore", payload: { key: "Tab", ok: document.activeElement === mc } });
+                }
               }, 50);
               break;
             case "Enter":
@@ -650,7 +697,10 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
                   const ib = document.querySelector("#input-box") as HTMLElement | null;
                   if (ib) ib.blur();
                   const mc = document.querySelector(".map-container") as HTMLElement | null;
-                  if (mc) mc.focus();
+                  if (mc) {
+                    mc.focus();
+                    if (import.meta.env.DEV) log({ cat: "state", op: "focus.restore", payload: { key: "Enter", ok: document.activeElement === mc } });
+                  }
                 }, 50);
               }
               break;
@@ -686,6 +736,23 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("click", onFallbackClick);
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
+
+      // ★ 诊断插桩:焦点进出画布的翻转轨迹(降噪:只记翻转;仅 dev 注册,生产零开销)
+      if (import.meta.env.DEV) {
+        let lastFocusInCanvas: boolean | null = null;
+        const checkFocusFlip = (why: string) => {
+          const a = document.activeElement as HTMLElement | null;
+          const inC = !!a?.closest(".mind-elixir-inner");
+          if (inC !== lastFocusInCanvas) {
+            lastFocusInCanvas = inC;
+            log({ cat: "state", op: "focus.flip", payload: { why, inCanvas: inC, ae: describeFocusTarget(a) } });
+          }
+        };
+        onFocusInProbe = () => checkFocusFlip("focusin");
+        onFocusOutProbe = () => setTimeout(() => checkFocusFlip("focusout"), 0);
+        document.addEventListener("focusin", onFocusInProbe);
+        document.addEventListener("focusout", onFocusOutProbe);
+      }
 
       // === Fallback 拖动改层级(方案 N:source 高亮 + 占位框 + 兄弟让位 + 阈值 0.15)===
       // mind-elixir 5.14 内置 drag 不工作（Nt noop），但 moveNode API 可用。
@@ -1219,6 +1286,8 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (onContextMenu) inner.removeEventListener("contextmenu", onContextMenu);
       }
       if (onFallbackKey) document.removeEventListener("keydown", onFallbackKey);
+      if (onFocusInProbe) document.removeEventListener("focusin", onFocusInProbe);
+      if (onFocusOutProbe) document.removeEventListener("focusout", onFocusOutProbe);
       if (onDragMove) document.removeEventListener("mousemove", onDragMove);
       if (onDragEnd) document.removeEventListener("mouseup", onDragEnd);
       if (onDocClickCloseMenu) document.removeEventListener("click", onDocClickCloseMenu);
@@ -1303,6 +1372,15 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
   useEffect(() => {
     if (!instanceRef.current || !content) return;
     const data = toMindElixirData(content);
+    // ★ 诊断插桩:re-init 会替换 map-container(旧的可能持有焦点)
+    log({
+      cat: "mind-elixir", op: "re-init",
+      payload: {
+        rootId: content.root.id,
+        aeBefore: describeFocusTarget(document.activeElement),
+        inCanvasBefore: !!(document.activeElement as HTMLElement)?.closest(".mind-elixir-inner"),
+      },
+    });
     try {
       instanceRef.current.init(data);
     } catch (e) {
@@ -1312,6 +1390,14 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     setTimeout(() => {
       const inst = instanceRef.current;
       const state = useMindMapStore.getState();
+      // re-init 后焦点是否存活(旧 map-container 被替换 → 焦点回落 body?)
+      log({
+        cat: "state", op: "reinit.focus-check",
+        payload: {
+          ae: describeFocusTarget(document.activeElement),
+          inCanvas: !!(document.activeElement as HTMLElement)?.closest(".mind-elixir-inner"),
+        },
+      });
       if (!inst || !state.content) return;
       syncPriorityStylesExternal(inst, state);
       syncHourglassesExternal(inst, state);

@@ -12,8 +12,8 @@ beforeEach(() => {
 
 describe("FE-LLM-BANNER", () => {
   it("无 session 时不渲染", () => {
-    const { container } = render(<LlmSessionBanner />);
-    expect(container.firstChild).toBeNull();
+    render(<LlmSessionBanner />);
+    expect(document.querySelector(".llm-banner")).toBeNull();
   });
 
   it("有 session 时显示 banner", () => {
@@ -36,6 +36,28 @@ describe("FE-LLM-BANNER", () => {
     expect(screen.getByText(/接管/)).toBeInTheDocument();
   });
 
+  // === 系列修复回归(浮层玻璃化):bot 图标 SVG 化,emoji 清零 ===
+  it("★浮层修复回归★ icon 为 SVG,按钮文案 emoji 清零", () => {
+    useMindMapStore.setState({
+      llmSession: {
+        session: {
+          session_id: "s1",
+          client_name: "Claude",
+          acquired_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 60000,
+          last_heartbeat_ms: Date.now(),
+          operations_count: 0,
+        },
+        reason: "acquired",
+      },
+    });
+    const { container } = render(<LlmSessionBanner />);
+    expect(document.querySelector(".llm-banner-icon svg")).toBeInTheDocument();
+    expect(screen.getByText(/接管/).textContent).not.toMatch(
+      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u,
+    );
+  });
+
   it("剩余 ≤ 10s 进入 urgent 状态", async () => {
     useMindMapStore.setState({
       llmSession: {
@@ -50,8 +72,8 @@ describe("FE-LLM-BANNER", () => {
         reason: "acquired",
       },
     });
-    const { container } = render(<LlmSessionBanner />);
-    const banner = container.firstChild as HTMLElement;
+    render(<LlmSessionBanner />);
+    const banner = document.querySelector(".llm-banner") as HTMLElement;
     expect(banner.className).toContain("llm-banner-urgent");
   });
 
@@ -154,12 +176,12 @@ describe("FE-LLM-BANNER", () => {
       },
     });
     const { container } = render(<LlmSessionBanner />);
-    expect(container.firstChild).not.toBeNull();
+    expect(document.querySelector(".llm-banner")).not.toBeNull();
 
     // 模拟 release/expire:session 变 null,但 hadSession=true 触发淡出
     useMindMapStore.setState({ llmSession: null });
     await waitFor(() => {
-      const banner = container.firstChild as HTMLElement;
+      const banner = document.querySelector(".llm-banner") as HTMLElement;
       // 仍在 DOM 中(淡出中),且 class 含 llm-banner-fading
       expect(banner.className).toContain("llm-banner-fading");
     });
@@ -185,7 +207,7 @@ describe("FE-LLM-BANNER", () => {
     expect(useMindMapStore.getState().llmSession).toBeNull();
     // 但 banner 进入淡出态(跟 release/expire 路径一致)
     await waitFor(() => {
-      const banner = container.firstChild as HTMLElement;
+      const banner = document.querySelector(".llm-banner") as HTMLElement;
       expect(banner.className).toContain("llm-banner-fading");
     });
   });

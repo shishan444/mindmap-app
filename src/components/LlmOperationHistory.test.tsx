@@ -12,8 +12,8 @@ beforeEach(() => {
 
 describe("FE-LLM-HISTORY", () => {
   it("无操作时不渲染", () => {
-    const { container } = render(<LlmOperationHistory />);
-    expect(container.firstChild).toBeNull();
+    render(<LlmOperationHistory />);
+    expect(document.querySelector(".llm-history-panel")).toBeNull();
   });
 
   it("sidebar 折叠时不渲染", () => {
@@ -21,8 +21,8 @@ describe("FE-LLM-HISTORY", () => {
       sidebarCollapsed: true,
       llmOperations: [{ op_id: "1", op_type: "create_node", payload: { topic: "X" } }],
     });
-    const { container } = render(<LlmOperationHistory />);
-    expect(container.firstChild).toBeNull();
+    render(<LlmOperationHistory />);
+    expect(document.querySelector(".llm-history-panel")).toBeNull();
   });
 
   it("有操作时显示标题和计数", () => {
@@ -34,6 +34,25 @@ describe("FE-LLM-HISTORY", () => {
     render(<LlmOperationHistory />);
     expect(screen.getByText(/LLM 操作/)).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  // === 系列修复回归(浮层玻璃化):emoji 清零,图标改 SVG ===
+  it("★浮层修复回归★ 图标为 SVG(emoji 清零,玻璃体系线性图标)", () => {
+    useMindMapStore.setState({
+      llmOperations: [
+        { op_id: "1", op_type: "create_node", payload: { topic: "A" }, received_at_ms: Date.now() },
+        { op_id: "2", op_type: "delete_node", payload: { node_id: "n1" }, received_at_ms: Date.now() },
+      ],
+    });
+    const { container } = render(<LlmOperationHistory />);
+    // 列表 icon + header bot 图标均应为 svg(Portal 挂 body,查 document)
+    const icons = document.querySelectorAll(".llm-history-icon svg");
+    expect(icons.length).toBe(2);
+    expect(document.querySelector(".llm-history-title svg")).toBeInTheDocument();
+    // emoji 清零:标题不含 emoji 字符
+    expect(screen.getByText(/LLM 操作/).textContent).not.toMatch(
+      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u,
+    );
   });
 
   it("显示每种 op 类型的图标和标签", () => {
@@ -131,10 +150,10 @@ describe("FE-LLM-HISTORY", () => {
         { op_id: "1", op_type: "create_node", payload: { topic: "A" }, received_at_ms: Date.now() },
       ],
     });
-    const { container } = render(<LlmOperationHistory />);
-    expect(container.firstChild).not.toBeNull();
+    render(<LlmOperationHistory />);
+    expect(document.querySelector(".llm-history-panel")).not.toBeNull();
     fireEvent.click(screen.getByTitle("关闭操作历史"));
-    expect(container.firstChild).toBeNull();
+    expect(document.querySelector(".llm-history-panel")).toBeNull();
   });
 
   it("★bug 回归★ 点全部(N)▾ 展开后显示翻页(>10 条时)", () => {

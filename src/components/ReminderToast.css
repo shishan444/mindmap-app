@@ -1,48 +1,95 @@
+/* ============================================================
+   ReminderToast — 提醒浮窗(毛玻璃设计系统)
+   系列修复(浮层从底栏升起画布 bug):
+   1. 定位:右上(工具栏下方) — 原为 bottom:32px 贴底栏,观感"从底部
+      栏升起画布";改 macOS 通知习惯位,脱离底栏锚点
+   2. 视觉:七层玻璃构造(tokens.css 同源) — 原为白底亮蓝旧亮色体系
+   ============================================================ */
+
 .reminder-toast-container {
   position: fixed;
-  bottom: 32px;
-  right: 32px;
+  top: 64px; /* 工具栏浮岛下方 */
+  right: 24px;
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  pointer-events: none;
+  max-width: calc(100vw - 48px);
+}
+
+/* L1 基底+backdrop-filter / L5 受光 / 内容浮起 */
+.reminder-toast {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  max-width: 380px;
+  padding: 13px 14px;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  background: var(--glass-float-base);
+  backdrop-filter: var(--blur-float);
+  -webkit-backdrop-filter: var(--blur-float);
+  box-shadow: var(--e3);
+  overflow: hidden;
+  transition: filter 0.15s var(--ease);
+  animation: toast-drop-in 0.34s var(--ease);
+}
+
+.reminder-toast:hover {
+  filter: brightness(1.07);
+}
+
+/* L2 透光渐变 + L3 磨砂噪点 + L5 顶部受光带 */
+.reminder-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-lit), var(--noise);
   pointer-events: none;
 }
 
-.reminder-toast {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 280px;
-  max-width: 380px;
-  border-left: 4px solid #1a73e8;
-  cursor: pointer;
-  pointer-events: auto;
-  animation: toast-slide-in 0.25s ease-out;
+/* L4 渐变描边(mask 技术,同 .glass-edge) */
+.reminder-toast::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
-@keyframes toast-slide-in {
+@keyframes toast-drop-in {
   from {
-    transform: translateX(100%);
+    transform: translateY(-10px) translateX(14px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateY(0) translateX(0);
     opacity: 1;
   }
 }
 
-.reminder-toast:hover {
-  background: #f8f9fa;
-}
-
+/* 提醒语义:accent 绿玻璃徽章(与 attached-icon-badge/hero-badge 同构) */
 .reminder-toast-icon {
-  font-size: 22px;
   flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: var(--accent-tint);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .reminder-toast-body {
@@ -50,10 +97,12 @@
   min-width: 0;
 }
 
+/* L6 内容浮起 */
 .reminder-toast-title {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -61,7 +110,7 @@
 
 .reminder-toast-message {
   font-size: 12px;
-  color: #555;
+  color: var(--text-3);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -71,19 +120,20 @@
 }
 
 .reminder-toast-close {
+  flex-shrink: 0;
   border: none;
   background: transparent;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
-  color: #999;
-  padding: 0;
+  color: var(--text-3);
   width: 24px;
   height: 24px;
-  border-radius: 4px;
-  flex-shrink: 0;
+  border-radius: var(--radius-s);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .reminder-toast-close:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: #333;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-1);
 }

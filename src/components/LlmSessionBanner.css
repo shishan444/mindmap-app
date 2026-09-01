@@ -1,23 +1,59 @@
+/* ============================================================
+   LlmSessionBanner — LLM 会话横幅(毛玻璃设计系统)
+   系列修复(浮层家族风格断裂 bug):原为紫蓝实色渐变胶囊(旧亮色体系),
+   收编玻璃系统:深底玻璃 + LLM 语义紫透光(呼应舞台左上紫光斑)。
+   定位保持顶部居中(语义正确),自 38px 下移避开工具栏浮岛。
+   ============================================================ */
+
 .llm-banner {
   position: fixed;
-  top: 38px; /* 工具栏下方 */
+  top: 60px; /* 工具栏浮岛下方 */
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: linear-gradient(90deg, #4c1d95 0%, #1e3a8a 100%);
-  color: white;
+  padding: 8px 18px;
+  border-radius: 999px;
+  color: var(--text-1);
   font-size: 13px;
-  box-shadow: 0 4px 12px rgba(76, 29, 149, 0.4);
-  border: 1px solid rgba(167, 139, 250, 0.5);
+  background: var(--glass-float-base);
+  backdrop-filter: var(--blur-float);
+  -webkit-backdrop-filter: var(--blur-float);
+  /* 悬浮影 + 紫环境光晕 */
+  box-shadow: var(--e3), 0 0 28px rgba(139, 92, 246, 0.25);
+  overflow: hidden;
+}
+
+/* L2 透光渐变(LLM 语义紫)+ L3 噪点 */
+.llm-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.16) 0%, rgba(167, 139, 250, 0.03) 100%),
+    var(--noise);
+  pointer-events: none;
+}
+
+/* L4 渐变描边(mask 技术,适配胶囊圆角) */
+.llm-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .llm-banner-icon {
-  font-size: 16px;
+  display: flex;
+  color: #b7a3f5;
   animation: llm-pulse 1.5s ease-in-out infinite;
 }
 
@@ -26,26 +62,30 @@
   50% { opacity: 0.7; transform: scale(0.95); }
 }
 
+.llm-banner-text {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
 .llm-banner-text strong {
   font-weight: 600;
 }
 
 .llm-banner-takeover {
   margin-left: 8px;
-  padding: 4px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  padding: 4px 14px;
+  border: 1px solid rgba(0, 224, 127, 0.35);
+  background: var(--accent-tint);
+  color: var(--accent);
   border-radius: 12px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  transition: all 0.15s;
+  transition: all 0.15s var(--ease);
 }
 
 .llm-banner-takeover:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: white;
+  background: rgba(0, 224, 127, 0.20);
+  border-color: var(--accent);
 }
 
 .llm-banner-takeover:active {
@@ -57,16 +97,17 @@
   padding: 4px 8px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-3);
   cursor: pointer;
   font-size: 14px;
-  border-radius: 4px;
-  transition: all 0.15s;
+  line-height: 1;
+  border-radius: var(--radius-s);
+  transition: all 0.15s var(--ease);
 }
 
 .llm-banner-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-1);
 }
 
 .llm-banner-fading {
@@ -78,19 +119,23 @@
 .llm-banner-error {
   margin-left: 8px;
   font-size: 11px;
-  color: #fca5a5;
+  color: #ff9f9f;
 }
 
-/* 紧急状态:剩余 ≤ 10s */
+/* 紧急状态:剩余 ≤ 10s — 红橙环境光替换紫 */
 .llm-banner-urgent {
-  background: linear-gradient(90deg, #7f1d1d 0%, #b45309 100%);
-  border-color: rgba(252, 165, 165, 0.6);
+  box-shadow: var(--e3), 0 0 28px rgba(255, 107, 107, 0.30);
   animation: llm-flash 0.8s ease-in-out infinite;
+}
+
+.llm-banner-urgent::before {
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.18) 0%, rgba(255, 159, 67, 0.05) 100%),
+    var(--noise);
 }
 
 @keyframes llm-flash {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.85; }
+  50% { opacity: 0.88; }
 }
 
 /* 画布锁定(LLM 持锁时) */
