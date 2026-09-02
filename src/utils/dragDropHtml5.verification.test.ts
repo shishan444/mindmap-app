@@ -107,7 +107,7 @@ describe("根因修复后的守卫(防回归)", () => {
     );
 
     const onDragStartMatch = code.match(
-      /onDragStart\s*=\s*\(e:\s*MouseEvent\)\s*=>\s*{([\s\S]*?)^      };/m,
+      /onDragStart\s*=\s*\(e:\s*MouseEvent\)\s*=>\s*{([\s\S]*?)^ {6}};/m,
     );
     expect(onDragStartMatch).not.toBeNull();
     const handlerBody = onDragStartMatch![1];

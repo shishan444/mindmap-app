@@ -13,7 +13,7 @@
   bottom: 64px; /* ★ 系列修复:脱离底栏锚点,悬浮于画布之上 */
   width: 300px;
   max-height: 360px;
-  z-index: 900;
+  z-index: var(--z-float);
   display: flex;
   flex-direction: column;
   overflow: hidden;

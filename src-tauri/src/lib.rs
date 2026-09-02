@@ -600,7 +600,8 @@ pub(crate) fn build_app_menu<M: tauri::Manager<tauri::Wry>>(
 
     // 帮助
     let h_about = MenuItem::with_id(app, "about", "关于 思维导图", true, None::<&str>)?;
-    let help_menu = Submenu::with_id_and_items(app, "help", "帮助", true, &[&h_about])?;
+    let h_hotkeys = MenuItem::with_id(app, "hotkeys", "快捷键速查", true, Some("cmdOrCtrl+/"))?;
+    let help_menu = Submenu::with_id_and_items(app, "help", "帮助", true, &[&h_about, &h_hotkeys])?;
 
     Ok(Menu::with_items(
         app,

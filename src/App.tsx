@@ -7,10 +7,13 @@ import MindMapCanvas from "./components/MindMapCanvas";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
 import AboutModal from "./components/AboutModal";
+import HotkeyHelpModal from "./components/HotkeyHelpModal";
+import { GlassDialogHost, showAlert, showConfirm } from "./components/GlassDialog";
 import ReminderToast from "./components/ReminderToast";
 import { useMindMapStore, undo, redo, getHistoryInfo } from "./store";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { exportPng } from "./hooks/usePngExport";
+import { snapshotAnchor, keepAnchorInPlace, type AnchorSnapshot } from "./utils/canvasActions";
 import { useWindowState } from "./hooks/useWindowState";
 import { useSubWindowCloseGuard } from "./hooks/useSubWindowCloseGuard";
 import { useMcpBridge } from "./mcp/mcpBridge";
@@ -34,6 +37,7 @@ warnBrowserModeOnce();
 function App() {
   const [booted, setBooted] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResultIds, setSearchResultIds] = useState<string[]>([]);
   const [searchIndex, setSearchIndex] = useState(0);
@@ -246,7 +250,7 @@ function App() {
                   invoke: invoke as any,
                 }).catch((e) => {
                   console.error("[menu] 打开最近文件失败", e);
-                  alert("打开失败: " + e);
+                  void showAlert("打开失败", String(e), "error");
                 }),
               );
               return;
@@ -270,14 +274,14 @@ function App() {
       await invoke("create_new_window", { mode: "new", mmapPath: null });
     } catch (e) {
       console.error("[App] 创建新窗口失败", e);
-      alert("创建新窗口失败: " + e);
+      void showAlert("创建新窗口失败", String(e), "error");
     }
   };
 
   // 多窗口模式:点"打开"在**新窗口**打开文件(当前窗口不动)
   const handleOpen = async () => {
     const state0 = useMindMapStore.getState();
-    if (state0.dirty && !confirm("当前文档有未保存的修改,是否继续打开?")) return;
+    if (state0.dirty && !(await showConfirm("当前文档有未保存的修改", { message: "是否继续打开?", danger: true, confirmText: "继续打开" }))) return;
     const cfg = state0.config;
     const selected = await openDialog({
       defaultPath: cfg?.last_open_dir ?? undefined,
@@ -305,7 +309,7 @@ function App() {
       await invoke("create_new_window", { mode: "open", mmapPath: selected });
     } catch (e) {
       console.error("[App] 打开失败", e);
-      alert("打开失败: " + e);
+      await showAlert("打开失败", String(e), "error");
     }
   };
 
@@ -354,18 +358,18 @@ function App() {
     } catch (e) {
       console.error("[App] 保存失败", e);
       state.setSaveStatus("error");
-      alert("保存失败: " + e);
+      await showAlert("保存失败", String(e), "error");
     }
   };
 
   const handleSetPriority = (p: Priority) => {
     const state = useMindMapStore.getState();
     if (!state.content) {
-      alert("请先新建或打开一个文档");
+      void showAlert("未打开文档", "请先新建或打开一个文档");
       return;
     }
     if (!state.selectedNodeId) {
-      alert("请先选中一个节点");
+      void showAlert("未选中节点", "请先选中一个节点");
       return;
     }
     // 再次点击相同优先级 → 清除
@@ -431,7 +435,7 @@ function App() {
       const mind = mindInstanceRef.current;
       const state = useMindMapStore.getState();
       if (!mind?.exportSvg || !state.content) {
-        alert("无法导出 SVG");
+        await showAlert("无法导出 SVG");
         return;
       }
       const blob = mind.exportSvg();
@@ -447,7 +451,7 @@ function App() {
       await invoke("update_last_dirs", { openDir: null, exportDir: dir, importDir: null });
     } catch (e) {
       console.error("[App] SVG 导出失败", e);
-      alert("SVG 导出失败: " + e);
+      await showAlert("SVG 导出失败", String(e), "error");
     }
   };
 
@@ -455,11 +459,11 @@ function App() {
     try {
       const result = await exportPng(mindInstanceRef.current);
       if (result) {
-        console.log("[App] PNG 已导出:", result);
+        logUserAction("export.png.done", { result });
       }
     } catch (e) {
       console.error("[App] PNG 导出失败", e);
-      alert("PNG 导出失败: " + e);
+      await showAlert("PNG 导出失败", String(e), "error");
     }
   };
 
@@ -492,7 +496,7 @@ function App() {
       }
     } catch (e) {
       console.error("[App] Markdown 导出失败", e);
-      alert("Markdown 导出失败: " + e);
+      await showAlert("Markdown 导出失败", String(e), "error");
     }
   };
 
@@ -518,7 +522,7 @@ function App() {
       }
     } catch (e) {
       console.error("[App] Markdown 导入失败", e);
-      alert("Markdown 导入失败: " + e);
+      await showAlert("Markdown 导入失败", String(e), "error");
     }
   };
 
@@ -552,7 +556,7 @@ function App() {
       }
     } catch (e) {
       console.error("[App] OPML 导出失败", e);
-      alert("OPML 导出失败: " + e);
+      await showAlert("OPML 导出失败", String(e), "error");
     }
   };
 
@@ -578,7 +582,7 @@ function App() {
       }
     } catch (e) {
       console.error("[App] OPML 导入失败", e);
-      alert("OPML 导入失败: " + e);
+      await showAlert("OPML 导入失败", String(e), "error");
     }
   };
 
@@ -597,6 +601,7 @@ function App() {
     "prio-p2": () => handleSetPriority("P2"),
     "prio-p3": () => handleSetPriority("P3"),
     about: () => setAboutOpen(true),
+    hotkeys: () => setHotkeyHelpOpen(true),
     prefs: () => { invoke("open_preference_window").catch((e) => console.error("[menu] 打开偏好设置失败", e)); },
     undo: () => undo(),
     redo: () => redo(),
@@ -614,12 +619,20 @@ function App() {
     "add-child": () => {
       const mind = useMindMapStore.getState().mindInstance;
       const s = getSelectedNode(mind);
-      if (mind && s) { mind.addChild(s); settleCanvasFocus(); }
+      if (mind && s) {
+        const anchor = snapshotAnchor(s as HTMLElement);
+        mind.addChild(s);
+        settleCanvasFocus(anchor);
+      }
     },
     "add-sibling": () => {
       const mind = useMindMapStore.getState().mindInstance;
       const s = getSelectedNode(mind);
-      if (mind && s && s.tagName !== "ME-ROOT") { mind.insertSibling("after", s); settleCanvasFocus(); }
+      if (mind && s && s.tagName !== "ME-ROOT") {
+        const anchor = snapshotAnchor(s as HTMLElement);
+        mind.insertSibling("after", s);
+        settleCanvasFocus(anchor);
+      }
     },
     "auto-layout": () => {
       const mind = useMindMapStore.getState().mindInstance;
@@ -660,7 +673,9 @@ function App() {
         <Sidebar />
       </div>
       <StatusBar />
+      <GlassDialogHost />
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <HotkeyHelpModal open={hotkeyHelpOpen} onClose={() => setHotkeyHelpOpen(false)} />
       <ReminderToast />
       <LlmSessionBanner />
       <LlmOperationHistory />
@@ -675,14 +690,21 @@ function getSelectedNode(mind: any): any | null {
   return document.querySelector("me-tpc.selected") as any;
 }
 
-/** 添加节点后:关闭编辑框并把焦点还给画布(与快捷键路径行为一致) */
-function settleCanvasFocus() {
+/** 添加节点后:关闭编辑框 + 焦点归还 + 位置保持补偿(画布纹丝不动) */
+function settleCanvasFocus(anchor?: AnchorSnapshot) {
   setTimeout(() => {
     const ib = document.querySelector("#input-box") as HTMLElement | null;
     if (ib) ib.blur();
     const mc = document.querySelector(".map-container") as HTMLElement | null;
-    if (mc) mc.focus();
-  }, 50);
+    if (mc) mc.focus({ preventScroll: true }); // 视图主权:焦点归还绝不带动滚动
+    // ★ 视图主权公理:内容操作永不移动画布;anchor 为创建前快照,
+    // 此处反向平移恰好抵消 5.14 layout 推飞 → 净位移为零
+    if (anchor) {
+      const inner = document.querySelector(".mind-elixir-inner") as HTMLElement | null;
+      const mind = useMindMapStore.getState().mindInstance;
+      if (inner) keepAnchorInPlace(mind, inner, anchor);
+    }
+  }, 60);
 }
 
 /** 查找指定 id 节点的优先级 */

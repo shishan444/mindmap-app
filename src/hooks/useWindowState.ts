@@ -72,7 +72,9 @@ export function useWindowState(
         const win = getter.getCurrentWindow();
         await applyWindowState(win, cfg.window_state);
       } catch (e) {
-        // 非 Tauri 环境（测试 / 浏览器）静默忽略
+        // 非 Tauri 环境（测试 / 浏览器）忽略;Tauri 下报错可见
+        // (历史教训:ACL 拒绝被静默吞掉 → 窗口状态恢复静默失效)
+        console.error("[useWindowState] 恢复窗口状态失败:", e);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,7 +94,7 @@ export function useWindowState(
           await saveCurrentWindowState(tauriGetter, invoke);
         });
       } catch (e) {
-        // 静默
+        console.error("[useWindowState] 注册关闭保存失败:", e);
       }
     })();
     return () => {

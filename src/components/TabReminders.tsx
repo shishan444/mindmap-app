@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
+import { showAlert, showConfirm } from "./GlassDialog";
 import type { Reminder } from "../types";
 import "./TabReminders.css";
 
@@ -117,18 +118,22 @@ export default function TabReminders() {
       setAllReminders(idx.reminders);
       handleCancel();
     } catch (e) {
-      alert(editingId && editingId !== "new" ? "修改提醒失败: " + e : "添加提醒失败: " + e);
+      await showAlert(
+        editingId && editingId !== "new" ? "修改提醒失败" : "添加提醒失败",
+        String(e),
+        "error",
+      );
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确定删除此提醒？")) return;
+    if (!(await showConfirm("删除提醒", { message: "确定删除此提醒?", danger: true, confirmText: "删除" }))) return;
     try {
       const idx = await invoke<{ reminders: Reminder[] }>("delete_reminder", { id });
       setReminders(idx.reminders.filter((r) => r.node_id === selectedId));
       setAllReminders(idx.reminders);
     } catch (e) {
-      alert("删除失败: " + e);
+      await showAlert("删除提醒失败", String(e), "error");
     }
   };
 
@@ -139,7 +144,7 @@ export default function TabReminders() {
       setReminders(idx.reminders.filter((x) => x.node_id === selectedId));
       setAllReminders(idx.reminders);
     } catch (e) {
-      alert("切换失败: " + e);
+      await showAlert("切换提醒状态失败", String(e), "error");
     }
   };
 

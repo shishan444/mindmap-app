@@ -35,7 +35,7 @@ button {
 /* 舞台:深蓝灰渐变,四周留缝让 UI 浮岛成型 */
 .app-root {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-content);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -45,10 +45,16 @@ button {
   background: var(--bg-gradient);
 }
 
-/* stage-fx 是 z0 装饰层,其余子元素提到其上 */
-.app-root > *:not(.stage-fx) {
+/* stage-fx 是 z0 装饰层,布局元素提到其上。
+   ★ 显式列举(禁止通配 `> *`):通配规则曾三次劫持浮层组件的
+   position:fixed(v0.3.1 根因,AboutModal/HotkeyHelpModal 连续受害)。
+   纪律:浮层(modal/toast/banner)必须 createPortal 挂 body,不挂 app-root;
+   新增布局元素须加入下方列举。architecture.test 静态守护此规则。 */
+.app-root > .toolbar-wrap,
+.app-root > .app-main,
+.app-root > .status-bar {
   position: relative;
-  z-index: 2;
+  z-index: var(--z-content);
 }
 
 .app-main {

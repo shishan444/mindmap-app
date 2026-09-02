@@ -56,6 +56,24 @@
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ============================================================
+     层级体系(自底向上):舞台装饰 → 内容 → 画布内部 → 节点徽章 →
+     常驻 UI → 下拉菜单 → 画布浮出预览 → 功能浮层 → 状态横幅 →
+     模态 → 通知
+     纪律:新增浮层一律用 token,禁止裸写 z-index 数字
+     ============================================================ */
+  --z-stage: 0;         /* stage-fx 舞台装饰层 */
+  --z-content: 2;       /* app-root 常规内容基线 */
+  --z-canvas-in: 5;     /* 画布内部叠加(拖拽源高亮) */
+  --z-node-badge: 50;   /* 节点徽章(沙漏/优先级条) */
+  --z-chrome: 150;      /* 常驻 UI(工具栏) */
+  --z-dropdown: 300;    /* 下拉/右键菜单 */
+  --z-canvas-pop: 600;  /* 画布浮出预览(拖拽占位/连线) */
+  --z-float: 900;       /* 功能浮层(LLM 操作历史) */
+  --z-banner: 1000;     /* 状态横幅(LLM 会话) */
+  --z-modal: 1100;      /* 模态(玻璃对话框/About) */
+  --z-toast: 2000;      /* 通知(最高,允许压模态) */
+
   /* 节点内容默认样式(由偏好设置 config.ui 驱动,App 运行时覆盖) */
   --node-font-size: 13px;
   --node-font-family: inherit;
@@ -66,7 +84,7 @@
    舞台:光斑 + 点阵 + 渐晕(App 布局的背景装饰层)
    ============================================================ */
 .stage-fx {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  position: fixed; inset: 0; z-index: var(--z-stage); pointer-events: none; overflow: hidden;
 }
 .stage-fx .glow-orb {
   position: absolute; border-radius: 50%;

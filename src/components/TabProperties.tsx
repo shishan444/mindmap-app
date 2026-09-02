@@ -10,6 +10,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMindMapStore } from "../store";
+import { showAlert, showConfirm } from "./GlassDialog";
 import type { AttachedFile, FileType, Priority } from "../types";
 import "./Common.css";
 
@@ -130,12 +131,13 @@ export default function TabProperties() {
 
   const handleAttach = async (fileType: FileType, exts: string[]) => {
     if (!selectedId) {
-      alert("请先在画布上选中一个节点再附加文件。");
+      await showAlert("未选中节点", "请先在画布上选中一个节点再附加文件。");
       return;
     }
     if (!filePath) {
-      alert(
-        "附加文件需要先保存当前文档。\n请按 Cmd+S(或工具栏 💾 按钮)保存后再试。",
+      await showAlert(
+        "需要先保存文档",
+        "附加文件需要先保存当前文档。\n请按 Cmd+S 保存后再试。",
       );
       return;
     }
@@ -148,7 +150,7 @@ export default function TabProperties() {
       selected = typeof result === "string" ? result : null;
     } catch (e) {
       console.error("[TabProperties] openDialog 失败", e);
-      alert("打开文件选择器失败: " + e);
+      await showAlert("打开文件选择器失败", String(e), "error");
       return;
     }
     if (!selected) return;
@@ -189,13 +191,13 @@ export default function TabProperties() {
       }
     } catch (e) {
       console.error("[TabProperties] attach_file_to_node 失败", e);
-      alert("附加文件失败: " + e);
+      await showAlert("附加文件失败", String(e), "error");
     }
   };
 
   const handleRemoveAttached = async () => {
     if (!filePath || !selectedId || !node.attached_file) return;
-    if (!confirm("确定移除附件?")) return;
+    if (!(await showConfirm("移除附件", { message: "确定移除附件?", danger: true, confirmText: "移除" }))) return;
     try {
       await invoke("remove_attached_file", { mmapPath: filePath, nodeId: selectedId });
       // 移除附件时清除固定尺寸 style,让节点恢复自适应
@@ -225,7 +227,7 @@ export default function TabProperties() {
         }
       }
     } catch (e) {
-      alert("移除附件失败: " + e);
+      await showAlert("移除附件失败", String(e), "error");
     }
   };
 
@@ -234,14 +236,14 @@ export default function TabProperties() {
     try {
       await invoke("open_attached_file", { mmapPath: filePath, nodeId: selectedId });
     } catch (e) {
-      alert("打开失败: " + e);
+      await showAlert("打开附件失败", String(e), "error");
     }
   };
 
   const handleReplaceAttached = async () => {
     if (!selectedId || !node.attached_file) return;
     if (!filePath) {
-      alert("替换附件需要先保存当前文档。\n请按 Cmd+S 保存后再试。");
+      await showAlert("需要先保存文档", "替换附件需要先保存当前文档。\n请按 Cmd+S 保存后再试。");
       return;
     }
     let selected: string | null = null;
@@ -250,7 +252,7 @@ export default function TabProperties() {
       selected = typeof result === "string" ? result : null;
     } catch (e) {
       console.error("[TabProperties] openDialog(替换) 失败", e);
-      alert("打开文件选择器失败: " + e);
+      await showAlert("打开文件选择器失败", String(e), "error");
       return;
     }
     if (!selected) return;
@@ -277,7 +279,7 @@ export default function TabProperties() {
       });
     } catch (e) {
       console.error("[TabProperties] replace_attached_file 失败", e);
-      alert("替换附件失败: " + e);
+      await showAlert("替换附件失败", String(e), "error");
     }
   };
 
@@ -286,7 +288,7 @@ export default function TabProperties() {
     try {
       await invoke("reveal_attached_file", { mmapPath: filePath, nodeId: selectedId });
     } catch (e) {
-      alert("Finder 显示失败: " + e);
+      await showAlert("Finder 显示失败", String(e), "error");
     }
   };
 

@@ -1,5 +1,5 @@
 // 完整 E2E 模拟人工操作回归验证(v5 - 含 Tauri mock 注入)
-import WebSocket from "ws";
+import WS from "ws";
 import { writeFileSync } from "fs";
 
 async function getTargets() { return (await fetch(`http://localhost:9333/json`)).json(); }
@@ -19,7 +19,7 @@ class CDPClient {
   static async connect() {
     const targets = await getTargets();
     const page = targets.find(t => t.type === "page");
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    const ws = new WS(page.webSocketDebuggerUrl);
     await new Promise((r, j) => { ws.once("open", r); ws.once("error", j); });
     return new CDPClient(ws);
   }
@@ -468,7 +468,7 @@ record("H1", "搜索框输入触发", searchOk);
 
 // === J. 偏好设置 ===
 console.log("\n=== J. 偏好设置面板 ===");
-const prefOpen = await c.evaluate(`(function(){
+await c.evaluate(`(function(){
   const btns = Array.from(document.querySelectorAll("button, [role=button]"));
   const pref = btns.find(b => /偏好|设置|preference/i.test(b.title || ""));
   if (pref) { pref.click(); return true; }

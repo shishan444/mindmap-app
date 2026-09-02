@@ -18,6 +18,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
+import { logMindElixir } from "../utils/devLogger";
 
 // 模块级状态:记录 LLM 会话是否在 zundo pause 中
 let llmSessionPaused = false;
@@ -56,10 +57,11 @@ export async function applyOperation(mind: any, op: LlmOperation): Promise<void>
   try {
     await invoke("__echo", { msg: `[applyOp] start ${op.op_type}` });
   } catch {}
-  console.log("[applyOperation] start:", op.op_type, "payload:", op.payload);
+  logMindElixir("op.start", { op_type: op.op_type, op_id: (op as any).op_id });
   switch (op.op_type) {
     case "create_node": {
-      let { parent_id, topic, priority, icons } = op.payload;
+      let { parent_id } = op.payload;
+      const { topic, priority, icons } = op.payload;
       // ★ 约定转换:LLM 用 "root" 指代文档根节点,实际 root id 是 UUID
       // 这里从 store 拿真实 root id 替换
       if (parent_id === "root") {
@@ -195,18 +197,18 @@ export async function initLlmBridge(): Promise<void> {
   // 浏览器模式(无 Tauri 运行时)静默跳过
   const { isTauri } = await import("../utils/tauriEnv");
   if (!isTauri()) {
-    console.log("[llm-bridge] 非 Tauri 环境,跳过 listen 注册");
+    logMindElixir("bridge.skip-non-tauri");
     return;
   }
 
-  console.log("[llm-bridge] initLlmBridge 启动,注册 listen...");
+  logMindElixir("bridge.init");
 
   try {
     // 订阅 llm-operation
     const unlisten1 = await listen<LlmOperation>("llm-operation", (event) => {
       // ★ 诊断:通过 invoke 反馈到 Rust stdout(因为前端 console 默认不到 stdout)
       invoke("__echo", { msg: `[frontend] ★★★ 收到 llm-operation ${event.payload?.op_type} ${event.payload?.op_id}` }).catch(() => {});
-      console.log("[llm-bridge] ★★★ 收到 llm-operation ★★★:", event.payload?.op_type, event.payload?.op_id);
+      logMindElixir("bridge.op-received", { op_type: event.payload?.op_type, op_id: event.payload?.op_id });
       const op = event.payload;
       // 记录到操作历史(便于侧栏显示)
       useMindMapStore.getState().pushLlmOperation?.({
@@ -214,22 +216,22 @@ export async function initLlmBridge(): Promise<void> {
         received_at_ms: Date.now(),
       });
       const mind = useMindMapStore.getState().mindInstance;
-      console.log("[llm-bridge] mind 实例:", !!mind);
+      logMindElixir("bridge.mind-ready", { ready: !!mind });
       if (!mind) {
         console.warn("[llm-bridge] mind 实例未就绪,丢弃 op:", op.op_id);
         return;
       }
-      console.log("[llm-bridge] 调 applyOperation");
+      logMindElixir("bridge.apply-call");
       // async 调用,catch 错误
     applyOperation(mind, op).catch((e) => {
       console.error("[llm-bridge] op 执行失败:", op, e);
     });
   });
-    console.log("[llm-bridge] ✓ llm-operation listen 注册成功");
+    logMindElixir("bridge.op-listen-ok");
 
   // 订阅 llm-session-changed
   const unlisten2 = await listen<SessionChange>("llm-session-changed", (event) => {
-    console.log("[llm-bridge] 收到 llm-session-changed:", event.payload?.reason);
+    logMindElixir("bridge.session-changed", { reason: event.payload?.reason });
     const change = event.payload;
     useMindMapStore.getState().setLlmSession?.(change);
 
@@ -258,13 +260,13 @@ export async function initLlmBridge(): Promise<void> {
       }
     }
   });
-    console.log("[llm-bridge] ✓ llm-session-changed listen 注册成功");
+    logMindElixir("bridge.session-listen-ok");
 
   unlisteners.push(unlisten1, unlisten2);
   } catch (e) {
     console.error("[llm-bridge] ✗ initLlmBridge 失败:", e);
   }
-  console.log("[llm-bridge] initLlmBridge 完成");
+  logMindElixir("bridge.init-done");
 }
 
 /**

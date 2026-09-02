@@ -23,6 +23,12 @@
     "core:webview:default",
     "core:window:allow-start-dragging",
     "core:window:allow-destroy",
-    "core:window:allow-set-title"
+    "core:window:allow-set-title",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-is-maximized",
+    "core:window:allow-maximize"
   ]
 }

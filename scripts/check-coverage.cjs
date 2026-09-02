@@ -27,16 +27,12 @@ function parseYamlManual(filepath) {
   const lines = content.split("\n");
   const items = [];
   let currentItem = null;
-  let inKeywords = false;
-  let inTestsList = false;
 
   for (const line of lines) {
     const itemMatch = line.match(/^\s{2,4}- id: (.+)$/);
     if (itemMatch) {
       if (currentItem) items.push(currentItem);
       currentItem = { id: itemMatch[1].trim(), tests: [], keywords: [] };
-      inKeywords = false;
-      inTestsList = false;
       continue;
     }
     if (!currentItem) continue;
@@ -54,7 +50,6 @@ function parseYamlManual(filepath) {
         .split(",")
         .map((s) => s.trim().replace(/^["']|["']$/g, ""))
         .filter(Boolean);
-      inKeywords = false;
       continue;
     }
 
@@ -65,15 +60,9 @@ function parseYamlManual(filepath) {
         .split(",")
         .map((s) => s.trim().replace(/^["']|["']$/g, ""))
         .filter(Boolean);
-      inTestsList = false;
       continue;
     }
 
-    // 关闭列表(遇到其他 key)
-    if (line.match(/^\s+\w+:/) && !line.match(/^\s+-/)) {
-      inKeywords = false;
-      inTestsList = false;
-    }
   }
   if (currentItem) items.push(currentItem);
   return items;

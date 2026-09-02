@@ -7,6 +7,9 @@ export PATH="$HOME/.cargo/bin:$PATH"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo "[pre-push] branch=$BRANCH"
 
+# Lint(P2-6:质量门补 lint 环节)
+npx eslint . || { echo "✗ ESLint failed"; exit 1; }
+
 # 类型检查
 npx tsc --noEmit || { echo "✗ TypeScript check failed"; exit 1; }
 

@@ -12,255 +12,28 @@ import {
   getImageFromDataTransfer,
   getImageFromClipboard,
 } from "../utils/imageEmbed";
-import { computeNodeReminderState } from "../utils/reminderState";
 import { computeDropZone, computePlaceholderRectFromActual, computeSiblingShift, buildConnectionLinePath, executeDrop, type DropZone } from "../utils/dragDrop";
 import { isEditingSession, shouldBlockDefaultDrag, shouldReSelectAfterDrop } from "../utils/editGuard";
-import { log } from "../utils/devLogger";
+import { log, logMindElixir } from "../utils/devLogger";
+import {
+  centerNodeInContainer,
+  snapshotAnchor,
+  keepAnchorInPlace,
+  shouldSwallowNavKeyOutsideCanvas,
+} from "../utils/canvasActions";
+import { showAlert } from "./GlassDialog";
+import {
+  syncHourglassesExternal,
+  syncPriorityStylesExternal,
+  syncAttachedFiles,
+} from "../utils/nodeBadges";
+import { describeFocusTarget } from "../utils/focusDebug";
 import "./MindMapCanvas.css";
 
 interface Props {
   onCreateInstance?: (mind: any) => void;
 }
 
-// ★ 诊断插桩 helper:焦点目标的紧凑描述(tag#id.class)
-// 用于 Tab/Enter 快捷键失效根因取证(纯观测,生产模式 log() 静默)
-function describeFocusTarget(el: Element | null): string {
-  if (!el) return "null";
-  const tag = el.tagName.toLowerCase();
-  const id = el.id ? `#${el.id}` : "";
-  const cls =
-    el instanceof HTMLElement && el.className
-      ? `.${String(el.className).trim().split(/\s+/).slice(0, 2).join(".")}`
-      : "";
-  return `${tag}${id}${cls}`;
-}
-
-// === 沙漏渲染 helper(module 顶层,多 useEffect 共享) ===
-function syncHourglassesExternal(inst: any, state: any) {
-  if (!inst || !state.content) return;
-  const reminders = state.allReminders || [];
-  const now = new Date();
-  const walk = (node: any) => {
-    if (!node?.id) return;
-    // findEle 可能 throw("Node not found, maybe collapsed") — 用 try/catch
-    // 节点 collapsed / 还没 init 完 / 用户在编辑中,都可能找不到 DOM
-    let tpc: any = null;
-    try {
-      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
-    } catch (e) {
-      // 节点暂时找不到,跳过(下次 content 变化会重试)
-      return;
-    }
-    if (!tpc) return;
-    // 移除旧沙漏
-    const old = tpc.parentElement?.querySelector(".hourglass-wrapper");
-    if (old) old.remove();
-    // 计算状态
-    const result = computeNodeReminderState(reminders, node.id, now);
-    if (!result.hasActive) {
-      for (const c of node.children || []) walk(c);
-      return;
-    }
-    // 创建沙漏容器,tpc 外部右上角
-    const wrapper = document.createElement("div");
-    wrapper.className = "hourglass-wrapper";
-    wrapper.style.cssText =
-      "position:absolute;right:-18px;top:-8px;z-index:50;pointer-events:none;";
-    wrapper.innerHTML = renderHourglassSvg(result.state, result.remainingRatio);
-    // 插到 tpc 的父元素(me-parent / me-wrapper)
-    const host = tpc.parentElement;
-    if (host && getComputedStyle(host).position === "static") {
-      host.style.position = "relative";
-    }
-    host?.appendChild(wrapper);
-    for (const c of node.children || []) walk(c);
-  };
-  walk(state.content.root);
-}
-
-function renderHourglassSvg(state: string, ratio: number): string {
-  const colors: Record<string, string> = {
-    future: "#4dc4ff",
-    looming: "#f5a623",
-    due: "#e74c3c",
-    done: "#9aa0a6",
-    paused: "#cccccc",
-  };
-  const color = colors[state] || colors.future;
-  const rotation = state === "done" ? 180 : 0;
-  const opacity = state === "paused" ? 0.4 : state === "done" ? 0.6 : 1;
-  const animClass =
-    state === "looming" ? "hourglass-flow-slow" : state === "due" ? "hourglass-flow-fast" : "";
-  const upperRatio = state === "done" ? 0 : Math.max(0, Math.min(1, ratio));
-  const lowerRatio = state === "done" ? 1 : 1 - upperRatio;
-  const upperPath = buildUpperSandPath(upperRatio);
-  const lowerPath = buildLowerSandPath(lowerRatio);
-  const streamOpacity = state === "looming" || state === "due" ? 0.9 : 0;
-  return `<svg width="14" height="14" viewBox="0 0 20 20" class="hourglass-icon hourglass-${state} ${animClass}" style="pointer-events:none;transform:rotate(${rotation}deg);opacity:${opacity};transition:transform 0.4s ease,opacity 0.3s ease;display:block" aria-hidden="true">
-    <rect x="3" y="2" width="14" height="1.5" fill="${color}"/>
-    <rect x="3" y="16.5" width="14" height="1.5" fill="${color}"/>
-    <path d="M4 3.5 L16 3.5 L11 9.5 Q10 10.3 9 9.5 Z" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="1.3" stroke-linejoin="round"/>
-    <path d="M4 16.5 L16 16.5 L11 10.5 Q10 9.7 9 10.5 Z" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="1.3" stroke-linejoin="round"/>
-    ${upperPath ? `<path d="${upperPath}" fill="${color}" fill-opacity="0.85"/>` : ""}
-    ${lowerPath ? `<path d="${lowerPath}" fill="${color}"/>` : ""}
-    <line x1="10" y1="9.5" x2="10" y2="10.5" stroke="${color}" stroke-width="0.6" class="hourglass-stream" opacity="${streamOpacity}"/>
-  </svg>`;
-}
-
-function buildUpperSandPath(ratio: number): string {
-  if (ratio <= 0) return "";
-  const topY = 3.5 + (9.5 - 3.5) * (1 - ratio);
-  const ratioAtTop = (topY - 3.5) / (9.5 - 3.5);
-  const halfWidth = 6 - 5 * ratioAtTop;
-  const cx = 10;
-  return `M${cx - halfWidth} ${topY} L${cx + halfWidth} ${topY} L11 9.5 Q10 10.3 9 9.5 Z`;
-}
-
-function buildLowerSandPath(ratio: number): string {
-  if (ratio <= 0) return "";
-  const topY = 16.5 - (16.5 - 10.5) * ratio;
-  const ratioAtTop = (16.5 - topY) / (16.5 - 10.5);
-  const halfWidth = 6 - 5 * ratioAtTop;
-  const cx = 10;
-  return `M${cx - halfWidth} ${topY} L${cx + halfWidth} ${topY} L16 16.5 L4 16.5 Z`;
-}
-
-// === 优先级视觉同步 helper(module 顶层,init/re-init/change 后共用) ===
-// ★ 修复(首开丢优先级):mind-elixir init()/refresh() 重建 DOM 后 priority class 全部丢失,
-// 原实现只在 change 事件/undo-redo 路径同步;打开文档的首开路径(re-init)无人补 →
-// 节点优先级视觉(左色条+图标)消失。此函数供 re-init 与 needStoreToMindSync 两处复用。
-function syncPriorityStylesExternal(inst: any, state: any) {
-  if (!inst || !state.content) return;
-  const walk = (node: any) => {
-    if (!node?.id) return;
-    let tpc: any = null;
-    try {
-      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
-    } catch {
-      return;
-    }
-    if (tpc) {
-      tpc.classList.remove("priority-p0", "priority-p1", "priority-p2", "priority-p3");
-      if (node.priority) {
-        tpc.classList.add(`priority-${node.priority.toLowerCase()}`);
-      }
-    }
-    for (const c of node.children || []) walk(c);
-  };
-  walk(state.content.root);
-}
-
-// === 附加文件渲染 helper ===
-// 按 attached_file.file_type 差异化渲染:
-// - image/pdf/slide/doc/sheet → 显示真实缩略图(<img>)
-// - video/audio/other → 显示类型图标(SVG)
-// - 所有类型:加类型色左边框 + 右下角扩展名角标(便于一眼识别)
-function syncAttachedFiles(inst: any, state: any) {
-  if (!inst || !state.content) return;
-  const mmapPath = state.filePath;
-  const walk = (node: any) => {
-    if (!node?.id) return;
-    let tpc: any = null;
-    try {
-      tpc = typeof inst.findEle === "function" ? inst.findEle(node.id) : null;
-    } catch {
-      return;
-    }
-    if (!tpc) return;
-    // 移除旧附件渲染
-    const oldRender = tpc.querySelector(".attached-render");
-    if (oldRender) oldRender.remove();
-    const attached = node.attached_file;
-    if (!attached) {
-      for (const c of node.children || []) walk(c);
-      return;
-    }
-    // 创建渲染容器(覆盖在 tpc 内部)
-    // data-file-type 用于 CSS 选择类型色边框(--attached-type-color)
-    const render = document.createElement("div");
-    render.className = "attached-render";
-    render.dataset.fileType = attached.file_type;
-    render.style.cssText =
-      "position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;background:#fff;";
-
-    if (attached.file_type === "image" || attached.file_type === "pdf" || attached.file_type === "slide" || attached.file_type === "doc" || attached.file_type === "sheet") {
-      // 真实缩略图(异步加载)
-      const img = document.createElement("img");
-      img.style.cssText = "max-width:100%;max-height:100%;object-fit:contain;";
-      img.alt = attached.original_name;
-      // 通过 invoke 读缩略图字节,转 data URL
-      if (mmapPath) {
-        // 用 dynamic import 避免 SSR/测试环境问题
-        (window as any).__TAURI_INTERNALS__?.invoke("read_thumbnail", {
-          mmapPath, uuid: attached.uuid,
-        }).then((bytes: number[] | null) => {
-          if (bytes && bytes.length) {
-            const b64 = bytesToBase64(bytes);
-            img.src = `data:image/png;base64,${b64}`;
-          } else {
-            img.className = "attached-fallback";
-            img.src = fileIconDataUri(attached.file_type);
-          }
-        }).catch(() => {
-          img.className = "attached-fallback";
-          img.src = fileIconDataUri(attached.file_type);
-        });
-      } else {
-        img.src = fileIconDataUri(attached.file_type);
-      }
-      render.appendChild(img);
-    } else {
-      // 视频/音频/其他 — 类型图标装进玻璃徽章(与面板 file-type-badge 同构)
-      const badge = document.createElement("div");
-      badge.className = "attached-icon-badge";
-      badge.innerHTML = fileIconSvg(attached.file_type);
-      render.appendChild(badge);
-    }
-
-    // 扩展名角标(右下角小标签,显示 .PDF/.MP4 等,辅助识别)
-    const extTag = document.createElement("div");
-    extTag.className = "attached-ext-tag";
-    extTag.textContent = (attached.ext || "?").toUpperCase();
-    render.appendChild(extTag);
-
-    const host = tpc;
-    if (host && getComputedStyle(host).position === "static") {
-      host.style.position = "relative";
-    }
-    host.appendChild(render);
-    for (const c of node.children || []) walk(c);
-  };
-  walk(state.content.root);
-}
-
-// 文件类型 → 内联 SVG(用于 video/audio/other,深色玻璃风格适配:细线+提亮色)
-function fileIconSvg(fileType: string): string {
-  const colors: Record<string, string> = {
-    video: "#b98ce0",
-    audio: "#55d6c9",
-    other: "#9aa3ad",
-  };
-  const color = colors[fileType] || colors.other;
-  if (fileType === "video") {
-    return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>`;
-  }
-  if (fileType === "audio") {
-    return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
-  }
-  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
-}
-
-function fileIconDataUri(fileType: string): string {
-  const svg = fileIconSvg(fileType);
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
-function bytesToBase64(bytes: number[] | Uint8Array): string {
-  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = "";
-  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
-  return btoa(binary);
-}
 
 export default function MindMapCanvas({ onCreateInstance }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -325,7 +98,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       // dev 模式暴露到 window 便于调试
       if (import.meta.env.DEV) {
         (window as any).__mind = mind;
-        console.log("[MindMapCanvas] mind 实例暴露到 window.__mind");
+        logMindElixir("mind.exposed-window");
       }
 
       // mind-elixir 5.14 的 toCenter 计算有偏差，根节点会偏下；
@@ -463,6 +236,8 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     // ★ 诊断插桩:焦点翻转监听(声明提级,cleanup 需要)
     let onFocusInProbe: (() => void) | null = null;
     let onFocusOutProbe: (() => void) | null = null;
+    // ★ 预防性焦点加固:input-box 销毁归焦(声明提级,cleanup 需要)
+    let onInputBoxFocusOut: ((e: FocusEvent) => void) | null = null;
 
     if (inner) {
       inner.setAttribute("tabindex", "0");
@@ -510,6 +285,18 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           !(e.target instanceof Node && active.contains(e.target))
         ) {
           active.blur();
+        }
+        // ★ 预防性焦点加固(Tab/Enter 失效防御):
+        // 浏览器规则:点击不可聚焦元素(me-tpc 等 div)不改变 activeElement —
+        // 焦点会停留在上次交互的控件(工具栏按钮/侧栏/搜索框)上,导致
+        // onFallbackKey 的 inCanvas 守卫放行 Tab/Enter → 快捷键失效。
+        // 画布内点击 = "我要操作画布"的强意图,统一归还焦点到 map-container。
+        if (e.target instanceof Node && inner.contains(e.target)) {
+          const aeNow = document.activeElement as HTMLElement | null;
+          if (!aeNow || !aeNow.closest(".mind-elixir-inner")) {
+            const mc = inner.querySelector(".map-container") as HTMLElement | null;
+            if (mc) mc.focus({ preventScroll: true });
+          }
         }
         const tpc = getMeTpc(e.target);
         if (!tpc) return;
@@ -629,6 +416,12 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           : false;
         if (!inCanvas) {
           if (dbgKey) log({ cat: "mind-elixir", op: "kbd.skip-not-in-canvas", payload: { key: e.key, ae: describeFocusTarget(ae) } });
+          // ★ 视图主权(无选中 Tab 丢视图 bug 根因):焦点不在画布时裸 Tab/Enter
+          // 若放行给浏览器,焦点环落焦画布容器会触发 scrollIntoView → 视图被
+          // 浏览器移动("画布找不到节点")。吞掉(输入类控件除外,编辑语义放行)。
+          if (shouldSwallowNavKeyOutsideCanvas(e as any, ae)) {
+            e.preventDefault();
+          }
           return;
         }
 
@@ -674,7 +467,9 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         let opChanged = false;
         try {
           switch (e.key) {
-            case "Tab":
+            case "Tab": {
+              // ★ 视图主权公理:创建前快照锚点(选中节点)视口位置
+              const anchor = snapshotAnchor(selected as HTMLElement);
               inst.addChild(selected);
               opChanged = true;
               setTimeout(() => {
@@ -684,13 +479,22 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
                 // 后续 Tab/Enter/F2 检查 inCanvas 失败 → 不处理
                 const mc = document.querySelector(".map-container") as HTMLElement | null;
                 if (mc) {
-                  mc.focus();
+                  mc.focus({ preventScroll: true });
                   if (import.meta.env.DEV) log({ cat: "state", op: "focus.restore", payload: { key: "Tab", ok: document.activeElement === mc } });
                 }
-              }, 50);
+                // ★ 根因修复(5.14 layout 推飞):树深≥3 时 addChild 触发
+                // layout 全树重排(锚点实测 x 238→-57,且经 .map-canvas 的
+                // 0.3s transition 渐进飞出)。keepAnchorInPlace:冻结动画→
+                // 反向平移恰好抵消→复检→解冻 → 画布纹丝不动,新节点自然
+                // 出现在锚点旁(与树浅时行为逐像素一致)。
+                keepAnchorInPlace(inst, inner, anchor);
+              }, 60);
               break;
+            }
             case "Enter":
               if (!isRoot) {
+                // ★ 视图主权:同 Tab — 创建前快照,创建后抵消推飞
+                const anchor = snapshotAnchor(selected as HTMLElement);
                 inst.insertSibling("after", selected);
                 opChanged = true;
                 setTimeout(() => {
@@ -698,10 +502,11 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
                   if (ib) ib.blur();
                   const mc = document.querySelector(".map-container") as HTMLElement | null;
                   if (mc) {
-                    mc.focus();
+                    mc.focus({ preventScroll: true });
                     if (import.meta.env.DEV) log({ cat: "state", op: "focus.restore", payload: { key: "Enter", ok: document.activeElement === mc } });
                   }
-                }, 50);
+                  keepAnchorInPlace(inst, inner, anchor);
+                }, 60);
               }
               break;
             case "F2":
@@ -736,6 +541,18 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
       inner.addEventListener("click", onFallbackClick);
       inner.addEventListener("dblclick", onFallbackDblClick);
       document.addEventListener("keydown", onFallbackKey);
+
+      // ★ 预防性焦点加固:编辑框(#input-box)销毁时焦点回落 body →
+      // 随后 Tab/Enter 因 inCanvas=false 失效。focusout 且 relatedTarget
+      // 为空(元素被移除的特征)时归还画布。点击侧栏等场景 relatedTarget
+      // 非空,不受影响。
+      onInputBoxFocusOut = (ev: FocusEvent) => {
+        const t = ev.target as HTMLElement | null;
+        if (t?.id !== "input-box" || ev.relatedTarget) return;
+        const mc = inner.querySelector(".map-container") as HTMLElement | null;
+        if (mc) mc.focus({ preventScroll: true });
+      };
+      document.addEventListener("focusout", onInputBoxFocusOut);
 
       // ★ 诊断插桩:焦点进出画布的翻转轨迹(降噪:只记翻转;仅 dev 注册,生产零开销)
       if (import.meta.env.DEV) {
@@ -1155,14 +972,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         addItem({
           label: "添加子节点",
           action: async () => {
+            const anchor = snapshotAnchor(tpc);
             await inst.addChild(tpc);
             setTimeout(() => {
               const ib = document.querySelector("#input-box") as HTMLElement | null;
               if (ib) ib.blur();
               const mc = document.querySelector(".map-container") as HTMLElement | null;
-              if (mc) mc.focus();
+              if (mc) mc.focus({ preventScroll: true });
+              // ★ 视图主权:位置保持补偿(冻结动画+抵消推飞,画布纹丝不动)
+              keepAnchorInPlace(inst, inner, anchor);
               syncFromMindElixir();
-            }, 50);
+            }, 60);
           },
         });
         addItem({
@@ -1170,14 +990,17 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
           disabled: isRoot,
           action: async () => {
             if (isRoot) return;
+            const anchor = snapshotAnchor(tpc);
             await inst.insertSibling("after", tpc);
             setTimeout(() => {
               const ib = document.querySelector("#input-box") as HTMLElement | null;
               if (ib) ib.blur();
               const mc = document.querySelector(".map-container") as HTMLElement | null;
-              if (mc) mc.focus();
+              if (mc) mc.focus({ preventScroll: true });
+              // ★ 视图主权:位置保持补偿(冻结动画+抵消推飞,画布纹丝不动)
+              keepAnchorInPlace(inst, inner, anchor);
               syncFromMindElixir();
-            }, 50);
+            }, 60);
           },
         });
         addItem({
@@ -1286,6 +1109,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         if (onContextMenu) inner.removeEventListener("contextmenu", onContextMenu);
       }
       if (onFallbackKey) document.removeEventListener("keydown", onFallbackKey);
+      if (onInputBoxFocusOut) document.removeEventListener("focusout", onInputBoxFocusOut);
       if (onFocusInProbe) document.removeEventListener("focusin", onFocusInProbe);
       if (onFocusOutProbe) document.removeEventListener("focusout", onFocusOutProbe);
       if (onDragMove) document.removeEventListener("mousemove", onDragMove);
@@ -1326,7 +1150,7 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         });
       } catch (err) {
         console.error("[MindMapCanvas] 图片处理失败", err);
-        alert("图片添加失败: " + err);
+        await showAlert("图片添加失败", String(err), "error");
       }
     };
 
@@ -1453,35 +1277,14 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
     // 居中跳转到指定节点(供 ReminderToast 调用)
     // 直接操作 mapCanvas 的 transform,把目标节点的中心对齐到容器中心
     (window as any).__centerNode = (nodeId: string): boolean => {
+      // ★ P1 重构:几何补偿逻辑收编 canvasActions.centerNodeInContainer
       const inst = instanceRef.current;
       if (!inst) return false;
       try {
         const tpc = typeof inst.findEle === "function" ? inst.findEle(nodeId) : null;
         if (!tpc) return false;
-        // 先选中(高亮)
         try { inst.selectNode(tpc); } catch {}
-        const inner = containerRef.current;
-        const mapCanvas = inner?.querySelector(".map-canvas") as HTMLElement | null;
-        if (!inner || !mapCanvas) return false;
-        const innerRect = inner.getBoundingClientRect();
-        const nodeRect = tpc.getBoundingClientRect();
-        // 目标:把 nodeRect 中心对齐到 innerRect 中心
-        const dx = (innerRect.x + innerRect.width / 2) - (nodeRect.x + nodeRect.width / 2);
-        const dy = (innerRect.y + innerRect.height / 2) - (nodeRect.y + nodeRect.height / 2);
-        if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return true;
-        // 用 getComputedStyle 解析 transform matrix(更稳健,不依赖字符串格式)
-        // mind-elixir 可能用 translate3d / matrix3d / 等多种格式
-        const ts = window.getComputedStyle(mapCanvas).transform;
-        let curX = 0, curY = 0, scale = 1;
-        if (ts && ts !== "none") {
-          const m = new DOMMatrix(ts);
-          curX = m.e;  // translate X
-          curY = m.f;  // translate Y
-          scale = m.a;  // scale X (= m11)
-        }
-        // 保持当前 scale(用户主动调的缩放不应被覆盖)
-        mapCanvas.style.transform = `translate3d(${curX + dx}px, ${curY + dy}px, 0px) scale(${scale})`;
-        return true;
+        return !!(containerRef.current && centerNodeInContainer(tpc, containerRef.current));
       } catch (e) {
         console.error("[MindMapCanvas] centerNode 失败", e);
         return false;

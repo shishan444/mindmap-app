@@ -10,7 +10,7 @@
   top: 60px; /* 工具栏浮岛下方 */
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1000;
+  z-index: var(--z-banner);
   display: flex;
   align-items: center;
   gap: 10px;

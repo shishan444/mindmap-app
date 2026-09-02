@@ -10,7 +10,7 @@
   position: fixed;
   top: 64px; /* 工具栏浮岛下方 */
   right: 24px;
-  z-index: 2000;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 10px;

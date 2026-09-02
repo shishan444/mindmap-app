@@ -21,7 +21,8 @@
     "test:all": "npm run test:fe && npm run test:be && npm run build",
     "test:regression": "npm run test:all",
     "test:watch:all": "concurrently -n fe,be -c blue,green \"vitest\" \"cd src-tauri && (cargo watch -x test -w src 2>/dev/null || echo '[skip] cargo-watch 未安装：cargo install cargo-watch')\"",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -38,6 +39,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -48,15 +50,24 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.3",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.2.0",
     "typescript": "~5.8.3",
+    "typescript-eslint": "^8.69.0",
     "vite": "^7.0.4",
     "vitest": "^4.1.10"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "fsevents@2.3.3": true
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,cjs,mjs,css}": [
+      "eslint --fix"
+    ]
   }
 }

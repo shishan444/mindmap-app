@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
 import { isTauri } from "../utils/tauriEnv";
 import type { Reminder } from "../types";
+import { logMindElixir } from "../utils/devLogger";
 import "./ReminderToast.css";
 
 interface ToastItem {
@@ -63,7 +64,7 @@ export default function ReminderToast() {
     const filePath = state.filePath;
     // 跨文件检查:source_file 非空且与当前 filePath 不同 → 不跳
     if (reminder.source_file && filePath && reminder.source_file !== filePath) {
-      console.log("[ReminderToast] 跨文件,不跳转:", reminder.source_file, "≠", filePath);
+      logMindElixir("toast.jump-skip-crossfile", { source: reminder.source_file });
       return;
     }
     // 用 __centerNode(MindMapCanvas 暴露),让节点真正居中到画布中央
@@ -71,7 +72,7 @@ export default function ReminderToast() {
     if (typeof centerFn === "function") {
       const ok = centerFn(reminder.node_id);
       if (ok) {
-        console.log("[ReminderToast] 跳转成功:", reminder.node_id);
+        logMindElixir("toast.jump-ok", { node_id: reminder.node_id });
         // 触发跳转后,刷新 reminders 缓存
         try {
           const idx = await invoke<{ reminders: Reminder[] }>("get_reminders");
@@ -79,7 +80,7 @@ export default function ReminderToast() {
         } catch {}
         return;
       }
-      console.log("[ReminderToast] __centerNode 返回 false(节点不在当前画布)");
+      logMindElixir("toast.jump-not-in-canvas");
     }
     // fallback:mind.focusNode
     const mind = state.mindInstance;
@@ -87,13 +88,13 @@ export default function ReminderToast() {
     const tpc =
       (typeof mind.findEle === "function" && mind.findEle(reminder.node_id)) || null;
     if (!tpc) {
-      console.log("[ReminderToast] 节点未找到:", reminder.node_id);
+      logMindElixir("toast.jump-node-not-found", { node_id: reminder.node_id });
       return;
     }
     try {
       if (mind.selectNode) mind.selectNode(tpc);
       if (mind.focusNode) mind.focusNode(tpc);
-      console.log("[ReminderToast] fallback focusNode 跳转:", reminder.node_id);
+      logMindElixir("toast.jump-fallback-ok", { node_id: reminder.node_id });
     } catch (e) {
       console.error("[ReminderToast] 跳转失败", e);
     }

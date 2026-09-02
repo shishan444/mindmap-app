@@ -6,7 +6,7 @@
 //   - 截图视觉验证
 // 覆盖本轮新加的 reminder 编辑 + centerNode 居中跳转
 
-import WebSocket from "ws";
+import WS from "ws";
 import { writeFileSync } from "fs";
 
 const TAURI_MOCK = `
@@ -150,7 +150,7 @@ class HumanSim {
   static async connect() {
     const targets = await getTargets();
     const page = targets.find(t => t.type === "page");
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    const ws = new WS(page.webSocketDebuggerUrl);
     await new Promise((r, j) => { ws.once("open", r); ws.once("error", j); });
     return new HumanSim(ws);
   }
@@ -274,8 +274,6 @@ function charToCode(ch) {
   if (ch === "\n") return "Enter";
   return "Key" + ch.toUpperCase();
 }
-
-const rand = (min, max) => min + Math.random() * (max - min);
 
 async function main() {
   const c = await HumanSim.connect();
@@ -433,12 +431,11 @@ async function main() {
     const r = editBtn.getBoundingClientRect();
     return { x: r.x + r.width/2, y: r.y + r.height/2 };
   })()`);
-  let h5EditOpened = false;
   if (editBtnPos) {
     await c.humanClick(editBtnPos.x, editBtnPos.y);
     await sleep(400);
-    h5EditOpened = await c.evaluate(`!!document.querySelector(".rem-add-form")`);
-    if (h5EditOpened) {
+    const opened = await c.evaluate(`!!document.querySelector(".rem-add-form")`);
+    if (opened) {
       // 改 title:清空 + 输入新值
       const titlePos = await c.centerOf(".rem-add-form input[type=text]");
       if (titlePos) {
@@ -481,7 +478,7 @@ async function main() {
   }
   // 调用 __centerNode(根节点 id)
   const rootId = await c.evaluate(`window.__store?.getState?.().content?.root?.id`);
-  const h6Before = await c.evaluate(`(function() {
+  await c.evaluate(`(function() {
     const inner = document.querySelector(".mind-elixir-inner");
     const root = document.querySelector("me-root");
     if (!inner || !root) return null;
@@ -499,7 +496,7 @@ async function main() {
   })()`);
   await sleep(300);
   // 调用 __centerNode
-  const h6Centered = await c.evaluate(`window.__centerNode(${JSON.stringify(rootId)})`);
+  await c.evaluate(`window.__centerNode(${JSON.stringify(rootId)})`);
   await sleep(500);
   const h6After = await c.evaluate(`(function() {
     const inner = document.querySelector(".mind-elixir-inner");

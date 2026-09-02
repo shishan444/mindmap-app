@@ -87,7 +87,7 @@ export function logSessionEnd(): void {
   });
 }
 
-let sessionStartedAt = Date.now();
+const sessionStartedAt = Date.now();
 
 export function isDevLoggerEnabled(): boolean {
   return enabled;

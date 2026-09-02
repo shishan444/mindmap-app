@@ -5,6 +5,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { useMindMapStore } from "../store";
 import TabProperties from "./TabProperties";
 import { makeContent, makeNode } from "../test/helpers";
+import { showAlert } from "./GlassDialog";
+
+// 玻璃对话框替代原生 alert(P1-3):mock 队列 API,断言调用参数
+vi.mock("./GlassDialog", () => ({
+  showAlert: vi.fn().mockResolvedValue(undefined),
+  showConfirm: vi.fn().mockResolvedValue(true),
+  GlassDialogHost: () => null,
+}));
 
 beforeEach(() => {
   useMindMapStore.setState({
@@ -89,14 +97,14 @@ describe("FE-PANEL: 附加文件图标点击(回归测试 - bug: 点击无响应
   });
 
   it("filePath=null(未保存文档)时点击图标:应弹提示,不再静默", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alertSpy = vi.mocked(showAlert);
+    alertSpy.mockClear();
     vi.mocked(openDialog).mockResolvedValue("/test/pic.jpg");
     render(<TabProperties />);
     fireEvent.click(screen.getByTitle(/^图片/));
     await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    expect(alertSpy.mock.calls[0][0]).toContain("保存");
+    expect(alertSpy.mock.calls[0].join(" ")).toContain("保存");
     expect(openDialog).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it("selectedId=null(无选中节点)时:应弹提示", async () => {
@@ -145,27 +153,27 @@ describe("FE-PANEL: 附加文件图标点击(回归测试 - bug: 点击无响应
   it("openDialog 抛错:应弹 alert,不再 unhandled rejection", async () => {
     useMindMapStore.setState({ filePath: "/tmp/test.mmap" });
     vi.mocked(openDialog).mockRejectedValue(new Error("permission denied"));
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alertSpy = vi.mocked(showAlert);
+    alertSpy.mockClear();
     render(<TabProperties />);
     fireEvent.click(screen.getByTitle(/^图片/));
     await waitFor(() => expect(alertSpy).toHaveBeenCalled());
     expect(alertSpy.mock.calls[0][0]).toContain("打开文件选择器失败");
     expect(invoke).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it("invoke 抛错:应弹 alert + console.error", async () => {
     useMindMapStore.setState({ filePath: "/tmp/test.mmap" });
     vi.mocked(openDialog).mockResolvedValue("/test/pic.jpg");
     vi.mocked(invoke).mockRejectedValue(new Error("磁盘满"));
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alertSpy = vi.mocked(showAlert);
+    alertSpy.mockClear();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     render(<TabProperties />);
     fireEvent.click(screen.getByTitle(/^图片/));
     await waitFor(() => expect(alertSpy).toHaveBeenCalled());
     expect(alertSpy.mock.calls[0][0]).toContain("附加文件失败");
     expect(errSpy).toHaveBeenCalled();
-    alertSpy.mockRestore();
     errSpy.mockRestore();
   });
 });

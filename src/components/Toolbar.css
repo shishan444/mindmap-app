@@ -8,7 +8,7 @@
 
 /* ============ 层2:工具栏(高频操作文字按钮) ============ */
 .toolbar {
-  position: relative; z-index: 150;
+  position: relative; z-index: var(--z-chrome);
   display: flex; align-items: center; gap: 6px;
   height: 54px; padding: 0 12px 0 78px;   /* 左侧:macOS Overlay 红绿灯区 */
   background-image:
