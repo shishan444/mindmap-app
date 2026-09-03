@@ -17,25 +17,26 @@ import {
 } from "./helpers";
 
 test.describe("拖拽族", () => {
-  test("dr-01: 非平移手势零副作用——普通滚轮/空白拖拽不得意外移动画布", async ({ page }) => {
+  test("dr-01: 横向滚轮平移画布(双指左右滑)——用户核心手势真实可用", async ({ page }) => {
     await gotoMap(page);
-    // ★ 产品疑点(2026-09-03 矩阵开发发现):测试环境下拖拽 pan 不生效——
-    // mind-elixir 5.14 panHelper 未启用,工程自实现拖拽仅覆盖节点 moveNode,
-    // 普通滚轮无行为。唯一实证的视图操作 = Ctrl+滚轮缩放(dr-04)。
-    // 用户口径"鼠标左右移动画布"的手势待产品确认;确认后此处应升级为
-    // 正向平移用例。当前守护反向不变量:非缩放手势不得移动视图。
+    // ★ 手势定案(2026-09-04,用户确认 + 实测):macOS 触控板双指左右滑动
+    // = wheel.deltaX → mind-elixir 5.14 以此平移画布(实测 deltaX 160 →
+    // 画布水平 -160px 精确生效;deltaY 不平移,拖拽无 pan——panHelper 未启用)。
+    // 这就是"鼠标左右移动画布"的全部机制,本用例正向守护它。
     const before = await nodeRect(page, "中心主题");
-    await page.mouse.move(700, 500);
-    await page.mouse.wheel(0, 240); // 普通滚轮
-    await page.mouse.down({ button: "middle" }); // 中键拖
-    await page.mouse.move(560, 380, { steps: 8 });
-    await page.mouse.up({ button: "middle" });
-    await page.mouse.move(640, 300); // 空白左键拖
-    await page.mouse.down();
-    await page.mouse.move(520, 380, { steps: 8 });
-    await page.mouse.up();
-    await page.waitForTimeout(400);
-    expectRectClose(before, await nodeRect(page, "中心主题"), 2);
+    const spot = await nodeRect(page, "主题一"); // 节点=canvas 后代,事件冒泡必经 pan 监听
+    await page.mouse.move(Math.round(spot.x + spot.width / 2), Math.round(spot.y + spot.height / 2));
+    // 真实双指滑动是连续小 delta 流;单次大 delta 不触发(实测),
+    // 用多次连发模拟触控板事件流
+    for (let i = 0; i < 6; i++) {
+      await page.mouse.wheel(40, 0);
+      await page.waitForTimeout(30);
+    }
+    await page.waitForTimeout(500);
+    const after = await nodeRect(page, "中心主题");
+    expect(Math.abs(after.x - before.x)).toBeGreaterThan(50); // 平移真的发生
+    // 平移是纯视图操作:树的形状不变(节点尺寸恒定)
+    expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(1);
   });
 
   test("dr-02: 拖动节点到另一主题——数据重组,视图不被拖飞", async ({ page }) => {
