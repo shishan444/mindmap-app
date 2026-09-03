@@ -1,6 +1,7 @@
 # MindMap MCP Server · 产品负责人概览
 
 > **文档定位**:产品决策版,5-10 分钟读完,读完能拍板。
+> **状态**:三个阶段已全部落地并验证(2026-09-02 同步);接入方式见[接入指南](./mcp-quickstart.md)
 > **配套技术文档**:[`mcp-architecture.md`](./mcp-architecture.md)(工程师实施依据,日常不需要看)
 
 ---
@@ -190,8 +191,8 @@ LLM → HTTP → store API ──→ store 改了,但画布不知道
 |------|----------|
 | LLM 走 mind-elixir 标准 API | `mind-elixir/dist/types/methods.d.ts` 确认 `addChild / reshapeNode / removeNodes / moveNodeIn` 都是 public API |
 | 每个 API fire 标准 "operation" 事件 | `mind-elixir/dist/MindElixir.iife.js` 22 个 fire 点确认 |
-| 现有 sync 链路自动复用 | `MindMapCanvas.tsx:323-328` 现有订阅 `operation` 事件 + `syncFromMindElixir` |
-| 自动保存天然防抖 | `useAutoSave` 2s 防抖,LLM 60s 调 20 次 = 1 次保存 |
+| 现有 sync 链路自动复用 | `MindMapCanvas.tsx` 现有订阅 `operation` 事件 + `syncFromMindElixir` |
+| 自动保存天然防抖 | `useAutoSave` 防抖(默认 2s,可配置),LLM 60s 调 20 次 = 1 次保存 |
 | undo 整合可行 | zundo `temporal.pause() / resume()` 已在现有 store 配置 |
 
 **单一数据源验证脚本**(可在浏览器 DevTools 执行):
@@ -205,6 +206,8 @@ window.__mind.addChild(window.__mind.currentNode)
 ## Part 4 · 如何证明这个架构合适
 
 **核心理念**:"合适"不是测试通过,是 **"用户真的在用 + 真的省时间"**。
+
+> **落地状态(2026-09-02)**:以下三个阶段已全部实施——单元测试覆盖 MCP 全模块,真实接入验证脚本八条链路全通(详见架构文档 §8"实施结果")。下文保留当时的验证框架(成功标准/失败信号/中止条件)作为决策记录;Phase 3 的留存与推荐指标属于长期观察,持续有效。
 
 ### Phase 1 · 只读 MVP(3-5 天)
 
@@ -240,7 +243,7 @@ window.__mind.addChild(window.__mind.currentNode)
 
 ---
 
-## 你需要拍板的 3 个决策点
+## 3 个决策点(已全部按推荐采纳,随实施落地)
 
 | # | 决策点 | 推荐 | 你需要确认 |
 |---|--------|------|----------|
@@ -254,17 +257,26 @@ window.__mind.addChild(window.__mind.currentNode)
 
 | 你想了解 | 看哪里 |
 |---------|-------|
-| 协议规范、JSON-RPC、axum 路由 | [`mcp-architecture.md` § 5](./mcp-architecture.md) |
-| EditorMode Mutex 的 Rust 实现思路 | [`mcp-architecture.md` § 5.1](./mcp-architecture.md) |
-| 完整的 Tools/Resources/Prompts 列表 | [`mcp-architecture.md` § 5.5-5.7](./mcp-architecture.md) |
-| 关键文件结构规划 | [`mcp-architecture.md` § 13](./mcp-architecture.md) |
-| 8 项风险与缓解 | [`mcp-architecture.md` § 10](./mcp-architecture.md) |
+| 如何接入(Claude Code / Claude Desktop / Cursor) | [`mcp-quickstart.md`](./mcp-quickstart.md) |
+| 写者锁、会话生命周期、撤销等核心机制 | [`mcp-architecture.md` § 4](./mcp-architecture.md) |
+| 协议面与工具分组 | [`mcp-architecture.md` § 5](./mcp-architecture.md) |
+| 技术选型 | [`mcp-architecture.md` § 7](./mcp-architecture.md) |
+| 实施结果与验证 | [`mcp-architecture.md` § 8](./mcp-architecture.md) |
+| 风险与缓解 | [`mcp-architecture.md` § 9](./mcp-architecture.md) |
+| 代码地图 | [`mcp-architecture.md` § 12](./mcp-architecture.md) |
 
 ---
 
-**下一步**:确认上面 3 个决策点后,进入 Phase 1 实施(只读 MVP,3-5 天)。
+**现状**:三个阶段均已交付。接入见[接入指南](./mcp-quickstart.md),实现依据见[架构设计 v2.0](./mcp-architecture.md)。
 
 ---
+
+## 设计修正记录(2026-09-02 v1.2):落地状态同步
+
+- 三个阶段全部交付:MCP 模块单元测试、真实接入验证八条链路、覆盖率门禁全部就位(架构 §8);
+- 文档体系重排为三层:概览(本文,为什么做)→ 接入指南(怎么用)→ 架构设计 v2.0(为什么这样实现),本文引用章节号已同步;
+- 与实现的两处口径统一:写工具为"受理即返回、前端异步应用"(架构 §4.5);撤销语义为"撤到会话开始前的快照"(v1.1 已修正,此处重申);
+- 三个决策点均按推荐采纳。
 
 ## 设计修正记录(2026-07-23 v1.1)
 

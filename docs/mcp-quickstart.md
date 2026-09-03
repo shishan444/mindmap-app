@@ -1,164 +1,93 @@
-# MindMap MCP · Claude Desktop 配置指南
+# MindMap MCP 接入指南
 
-> **状态**:Phase 1 只读 MVP
-> **配套**:[架构设计](./mcp-architecture.md) / [开发规划](./mcp-dev-plan.md)
+> 面向:想让 AI 助手(Claude / Cursor 等)接入思维导图协作的开发者。
+> 定位:入门指导——读完能建立正确的协作心智模型,完成接入。产品动机见[产品概览](./mcp-overview.md),协议与实现细节见[架构设计](./mcp-architecture.md)。
 
-## TL;DR
+## 一、这是什么
 
-1. 启动 mindmap-app
-2. Claude Desktop 配置文件加 MCP server
-3. 重启 Claude Desktop
-4. 让 Claude 读取你的思维导图
+mindmap-app 内置了一个 MCP 服务,随应用启动自动运行,不需要单独安装或部署。任何支持 MCP 的 AI 助手都可以连接它,读取你的思维导图,或在你监督下扩展、整理导图。
 
-## 1. 前置条件
+它的设计出发点可以概括为一句话:**AI 是能干活的实习生,但不能跟你抢方向盘。** 由此有三条贯穿全篇的设计,理解了它们,后面所有行为都不再需要死记:
 
-- mindmap-app 已安装并启动(开发版 `npm run tauri dev` 或 release 版)
-- Claude Desktop 已安装
-- macOS 12+(目前只支持 Apple Silicon)
+**服务内嵌,操作实时可见。** 服务藏在应用里,监听本机回环地址(127.0.0.1:23456),外部网络不可达。AI 的每一次操作都经由应用内部事件穿到画布——你看着它干活,而不是等它写完文件再刷新。
 
-## 2. 配置 Claude Desktop
+**读写分开对待。** 读是安全的,随时可以;写是有影响的,必须先拿到"会话锁"。这对应真实协作:实习生翻看文档不需要请示,动笔前要先打招呼。
 
-打开 Claude Desktop 配置文件(macOS):
+**单一数据通道。** AI 的写操作走与人工编辑完全相同的管道,原子保存、撤销历史、自动保存全部自动生效。不为 AI 另开一条捷径,也就不会产生第二条可能出错的数据路径。
+
+## 二、接入
+
+接入只依赖两件事:应用在运行,agent 知道服务地址。
+
+**Claude Code**(一条命令):
 
 ```bash
-open "~/Library/Application Support/Claude/claude_desktop_config.json"
+claude mcp add --transport http mindmap http://127.0.0.1:23456/mcp
 ```
 
-如果文件不存在,创建它。然后加入 mindmap server 配置:
+**Claude Desktop** / **Cursor** 等:在各自配置文件的 `mcpServers` 中登记同样的地址:
 
 ```jsonc
-{
-  "mcpServers": {
-    "mindmap": {
-      "url": "http://127.0.0.1:23456/mcp",
-      "transport": "http"
-    }
-  }
-}
+{ "mindmap": { "url": "http://127.0.0.1:23456/mcp", "transport": "http" } }
 ```
 
-> **注意**:如果你已经有其他 MCP server,把 `"mindmap"` 字段加到现有 `mcpServers` 对象里,不要替换整个文件。
-
-## 3. 验证连接
-
-1. **完全退出** Claude Desktop(`Cmd+Q`,不只是关窗口)
-2. 重新打开 Claude Desktop
-3. 在对话里问:
-
-> 我当前打开的思维导图有哪些节点?
-
-Claude 会:
-1. 调用 `read_mindmap` tool
-2. 拿到当前打开的 .mmap 文档树
-3. 总结给你
-
-如果看到 Claude 调用了 tool 并返回结果,**连接成功**。
-
-## 4. 可用的 Tools(Phase 1 只读)
-
-| Tool | 用法示例 |
-|------|---------|
-| `read_mindmap` | "读一下我当前的思维导图" |
-| `search_nodes` | "找一下包含'会议'的节点" |
-| `get_node` | "节点 root 的详细内容是什么?" |
-| `list_reminders` | "我设置了哪些提醒?" |
-| `export_mindmap` | "把当前导图导出成 markdown" |
-| `get_edit_state` | "现在能写操作吗?" |
-
-## 5. 健康检查(调试用)
-
-如果 Claude 接不上,在终端跑:
+验证方式最简单不过:重启 agent,问一句"我当前打开的思维导图有哪些节点"。AI 调用了工具并答上来,就是通了。终端里也可以直接确认服务活着:
 
 ```bash
-curl http://127.0.0.1:23456/health
-# 预期输出:ok
+curl http://127.0.0.1:23456/health   # 返回 ok
 ```
 
-如果失败:
-- **Connection refused**:mindmap-app 没启动,或 MCP server 启动失败(看 app 日志)
-- **超时**:端口被占用,检查 `lsof -i :23456`
+仓库还提供 `scripts/verify-mcp-live.sh`,一条脚本走通读、写、会话的全部链路。**注意它会向当前打开的文档真实写入测试节点**——请在测试文档上运行,或跑完后按一次 Cmd+Z(撤销语义见下节,一次正好回到脚本执行前)。
 
-直接测试 MCP 协议:
+## 三、协作方式
+
+### 读:随时可用
+
+AI 可以读取当前文档的节点树、按关键词搜索、查看节点详情与提醒、导出为 markdown;也可以通过路径参数读取其他 .mmap 文件。读取不改变任何状态,无需任何前置手续。
+
+### 写:先拿锁,再动笔
+
+同一份文档不能有两个写者。你正在编辑时,AI 申请写锁会被拒绝(它会收到"稍候重试"的提示);反过来,AI 持锁期间画布对你锁定,顶部出现会话横幅——但**你随时可以点横幅上的"接管"按钮收回画布**,AI 不会锁死应用。这个中断权永远在你手里,这是设计红线。
+
+一次完整的写会话是这样流转的:
+
+1. **申请**——AI 调用 acquire_session,报上名号与来意,领到一张有时限的会话凭证(默认六十秒,最长五分钟);
+2. **干活**——凭证时限内的所有写操作(建节点、改内容、删节点、移动、附文件)逐步生效,画布实时刷新。任务没做完可以心跳续约;
+3. **归还**——干完主动释放,横幅消失,画布回到你手里。若 AI 中途失联,凭证超时自动作废,应用不会被一个掉线的 AI 永久锁住。
+
+**撤销的语义值得单独记住**:AI 会话期间的操作不进入撤销历史,会话结束后你按一次 Cmd+Z,直接回到**会话开始之前**——整段 AI 的改动一步撤净,不留残渣。
+
+### 内置协作模板
+
+服务还内置三个提示词模板,对应三类高频任务:扩展主题(为某节点生成候选子结构)、会议纪要转导图、导图压缩成大纲。在 agent 中以 prompt 方式调用即可,模板会引导 AI 按正确的流程(先读上下文、再拿锁、再动笔)工作。
+
+## 四、边界与排查
+
+**当前的边界**:
+
+- 写操作仅作用于当前打开的文档(读取不受此限);
+- 流式推送(SSE)尚未实现,全部为请求-响应式;
+- 资源(resources)机制已就绪但暂无注册内容。
+
+**排查的思考路径**——连接问题按依赖顺序查,一眼定位:
+
+1. 应用活着吗?——`curl http://127.0.0.1:23456/health` 不通,先解决应用启动(见下);
+2. 服务起了但 agent 连不上?——检查 agent 的配置地址与重启;
+3. 写操作被拒?——这不是故障,是互斥在工作。先让 AI 调 get_edit_state 看当前状态:多半是没拿锁、锁已超时,或者你正在编辑。等一下重试,或先完成自己的操作。
+
+**应用打不开(提示"已损坏")**:这是 macOS 对未公证 ad-hoc 签名的拦截,与 MCP 无关。重新签名并清理系统注册即可:
 
 ```bash
-curl -X POST http://127.0.0.1:23456/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-```
-
-预期返回 JSON,包含 6 个 tool 的定义。
-
-## 6. 限制(Phase 1 已知)
-
-- ❌ **不能读其他 .mmap 文件**(只能读当前打开的)— Phase 2 加
-- ❌ **不能写操作**(create/update/delete 节点)— Phase 2 加
-- ❌ **不能附加文件**(attach_file)— Phase 3 加
-- ✅ 可以读、搜索、导出当前文档
-
-## 7. 工作原理(简述)
-
-```
-Claude Desktop
-    ↓ HTTP POST /mcp
-mindmap-app 内嵌的 MCP server (127.0.0.1:23456)
-    ↓ 调用 tool
-McpStateMirror(前端推送的状态镜像)
-    ↓
-返回结果给 Claude
-```
-
-前端 store 变化 → 防抖 1s → 推送到后端 → MCP tool 读最新状态。
-
-## 8. 反馈
-
-发现问题或想加新 tool,在 GitHub Issues 提:[shishan444/mindmap-app/issues](https://github.com/shishan444/mindmap-app/issues)
-
----
-
-## 9. 故障排查:App 提示"已损坏,无法打开"
-
-### 真正根因(不是 quarantine!)
-
-| 表面 | 真因 |
-|------|------|
-| Chrome 加 `com.apple.quarantine` | **签名损坏**:`codesign --verify` 失败,linker-signed 跟 Resources 不一致 |
-| Gatekeeper 拦截 | **LaunchServices 数据库混乱**:旧版本注册 + 废纸篓残留 |
-| macOS 26 (Tahoe) 报损坏 | 新策略:签名轻微不一致就拒绝(之前能宽容通过) |
-
-### 修复(3 步,按顺序)
-
-```bash
-# 1. 重新 ad-hoc 签名(覆盖损坏的 linker-signed)
 codesign --force --deep --sign - /Applications/mindmap-app.app
-
-# 2. 验证签名(应该 exit 0)
 codesign --verify --deep --strict /Applications/mindmap-app.app
-
-# 3. 清 LaunchServices 数据库 + 废纸篓旧版
-rm -rf ~/.Trash/mindmap-app*.app
-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
-  -f /Applications/mindmap-app.app
 ```
 
-### 验证
+若仍有问题,参考[发布说明](https://github.com/shishan444/mindmap-app/releases)中的完整处理步骤。
 
-```bash
-open /Applications/mindmap-app.app
-sleep 3
-curl http://127.0.0.1:23456/health  # 应返回 ok
-```
+## 五、延伸阅读
 
-### 还是不行?
-
-```bash
-# 查 macOS unified log 看真实拒绝原因
-log show --predicate 'process == "mindmap-app" OR senderImagePath CONTAINS "mindmap-app"' \
-  --info --last 1m | grep -iE "deny|reject|fail" | head -10
-
-# 极端方案:暂时禁用 Gatekeeper(不推荐长期)
-sudo spctl --master-disable
-```
-
-### 永久避免(开发者侧)
-
-本项目 build 流程已加自动重签(`scripts/sign-app.sh`),开发者跑 `npm run tauri:build` 出来的 .app 不会再有这个问题。普通用户从 Release 下 .dmg 安装仍需手动跑一次上面的修复步骤(因为 Apple Developer 签名 + 公证需要 $99/年,目前未做)。
+| 想了解 | 去处 |
+|---|---|
+| 为什么这样设计(产品视角的权衡) | [产品概览](./mcp-overview.md) |
+| 协议规范、锁的实现、完整工具清单 | [架构设计](./mcp-architecture.md) |
+| 具体工具的参数定义 | 连接后调用 tools/list,或读 `src-tauri/src/mcp/` 源码 |
