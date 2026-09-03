@@ -45,3 +45,5 @@ coverage/
 # 临时备份
 *.tmp
 *.backup.mmap
+test-results/
+playwright-report/

@@ -1,3 +1,6 @@
+// L2 测试基建:必须第一个 import(?testMode=1 时安装 mock Tauri internals,
+// 副作用须先于 App/任何 isTauri() 调用者执行;非测试模式零干预)
+import "./testing/installMockTauri";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./ErrorBoundary";

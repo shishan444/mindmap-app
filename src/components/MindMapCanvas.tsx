@@ -176,6 +176,15 @@ export default function MindMapCanvas({ onCreateInstance }: Props) {
         const newContent = fromMindElixirData(data, state.content);
         if (!newContent) return;
         if (state.content && state.content.root === newContent.root) return;
+        // 撤销/重做回流的短路:undo 触发 refresh 重渲,fire 的 operation 事件
+        // 会带着"内容相同但引用全新"的对象回流——若不拦,历史被 no-op 条目
+        // 污染,Cmd+Z 表现为"每按两次才退一步"(E2E da-01 抓到,2026-09-03)。
+        if (
+          state.content?.root &&
+          JSON.stringify(state.content.root) === JSON.stringify(newContent.root)
+        ) {
+          return;
+        }
         setContent(newContent);
         const sel = inst.currentNodes?.[0];
         if (sel?.nodeObj?.id) {

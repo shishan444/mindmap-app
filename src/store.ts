@@ -217,7 +217,14 @@ export const useMindMapStore = create<MindMapState>()(
 export function undo(): boolean {
   const temporal = useMindMapStore.temporal.getState();
   if (temporal.pastStates.length === 0) return false;
-  temporal.undo();
+  // partialize 同时跟踪 selectedNodeId——点击选节点也入史。Cmd+Z 的用户
+  // 语义是"撤销内容变更",须跳过"仅选中变化"的历史条,否则表现为
+  // "按了没反应"(E2E da-01 抓到的真实缺陷,2026-09-03)。
+  const contentBefore = useMindMapStore.getState().content;
+  for (let i = 0; i < temporal.pastStates.length; i++) {
+    temporal.undo();
+    if (useMindMapStore.getState().content !== contentBefore) break;
+  }
   useMindMapStore.setState({ dirty: true, needStoreToMindSync: true });
   return true;
 }
@@ -225,7 +232,11 @@ export function undo(): boolean {
 export function redo(): boolean {
   const temporal = useMindMapStore.temporal.getState();
   if (temporal.futureStates.length === 0) return false;
-  temporal.redo();
+  const contentBefore = useMindMapStore.getState().content;
+  for (let i = 0; i < temporal.futureStates.length; i++) {
+    temporal.redo();
+    if (useMindMapStore.getState().content !== contentBefore) break;
+  }
   useMindMapStore.setState({ dirty: true, needStoreToMindSync: true });
   return true;
 }
