@@ -1,0 +1,70 @@
+# CI(测试重构 Phase 3 / L4 质量门)
+# 与 pre-push 同一套检查在远端独立复验——本地钩子可绕过,CI 不可。
+# 关键红利:?testMode=1 的 mock Tauri 基建使 E2E 不依赖 macOS/Tauri 运行时,
+# ubuntu runner 即可跑完整旅程矩阵(webServer 自起测试专用 vite:1430)。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fe:
+    name: 前端(eslint + tsc + vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx eslint .
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  rust:
+    name: Rust(cargo test + MCP 覆盖率门禁)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: cargo test --lib --manifest-path src-tauri/Cargo.toml
+      # coverage 脚本内部执行 cargo test --list + vitest --list,需 node+rust 双环境
+      - run: node scripts/check-coverage.cjs
+
+  e2e:
+    name: E2E 旅程矩阵(五族)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      - run: npx playwright test
+      # 失败时上传报告辅助定位
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: test-results/
+          retention-days: 7

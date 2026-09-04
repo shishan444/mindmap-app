@@ -162,8 +162,12 @@ export function createMockTauri(): { internals: unknown; hooks: TestMockHooks } 
       case "get_reminders":
         return { reminders: [] };
       case "mcp_update_state":
-      case "llm_force_release":
       case "log_event":
+        return null;
+      case "llm_force_release":
+        // 对齐 Rust 真实行为:释放后广播 llm-session-changed(forced),
+        // 前端 banner 消失、画布解锁——E2E 的接管旅程依赖这个闭环
+        emit("llm-session-changed", { session: null, reason: "forced" });
         return null;
 
       // ---- 窗口 ----
@@ -216,6 +220,12 @@ export function createMockTauri(): { internals: unknown; hooks: TestMockHooks } 
 
       // ---- 插件通道:event listen 注册到表(emit 钩子可派发) ----
       default:
+        // 文件对话框:save 返回默认路径(打通导出管道的 save_bytes 环节),
+        // open 返回取消(路径不存在的文件会导致 open_mmap 失败)
+        if (cmd === "plugin:dialog|save") {
+          return (args.defaultPath as string) ?? "/test/dialog-export.md";
+        }
+        if (cmd === "plugin:dialog|open") return null;
         if (cmd.startsWith("plugin:event|listen")) {
           // ★ args.handler 是 transformCallback 已注册的回调 id——
           //   事件注册必须用它作键(生成新 id 会与真实回调错位,emit 打不中)

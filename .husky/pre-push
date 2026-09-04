@@ -16,6 +16,13 @@ npx tsc --noEmit || { echo "✗ TypeScript check failed"; exit 1; }
 # 前端测试
 npx vitest run || { echo "✗ FE tests failed"; exit 1; }
 
+# E2E 旅程矩阵(Phase 3:矩阵与单测同级强制;webServer 自起测试专用 vite:1430)
+if [ -f playwright.config.ts ]; then
+  npx playwright test || { echo "✗ E2E journey matrix failed"; exit 1; }
+else
+  echo "[pre-push] playwright 未配置,skip E2E"
+fi
+
 # Rust 测试
 if command -v cargo >/dev/null 2>&1; then
   (cd src-tauri && cargo test --lib) || { echo "✗ Rust tests failed"; exit 1; }
