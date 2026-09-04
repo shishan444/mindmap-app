@@ -6,7 +6,7 @@
    ============================================================ */
 
 import { test, expect } from "@playwright/test";
-import { gotoMap, clickNode, nodeRect, nodeCount, pressKey, expectRectClose, PRESET_NODE_COUNT } from "./helpers";
+import { gotoMap, clickNode, nodeCount, pressKey, expectRectClose, PRESET_NODE_COUNT } from "./helpers";
 
 test.describe("搜索跳转族", () => {
   test("sr-01: Cmd+F 搜索——实时匹配+计数+选中跳转到第一个", async ({ page }) => {
