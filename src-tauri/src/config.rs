@@ -228,11 +228,21 @@ mod tests {
 
     #[test]
     fn app_data_dir_under_home() {
-        // 验证 app_data_dir 返回的路径包含 "Application Support" 和 "MindMap"
+        // 不变量(跨平台,CI 跑 Linux):目录在用户主目录下且含 "MindMap";
+        // macOS 特有段 "Application Support" 仅在该平台断言
+        // (Linux 为 ~/.local/share/MindMap)
         if let Ok(p) = app_data_dir() {
             let s = p.to_string_lossy();
-            assert!(s.contains("Application Support"), "路径: {}", s);
             assert!(s.contains("MindMap"), "路径: {}", s);
+            if let Some(home) = dirs::home_dir() {
+                assert!(
+                    s.starts_with(home.to_string_lossy().as_ref()),
+                    "路径不在 HOME 下: {}",
+                    s
+                );
+            }
+            #[cfg(target_os = "macos")]
+            assert!(s.contains("Application Support"), "路径: {}", s);
         }
     }
 }
