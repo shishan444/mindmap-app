@@ -38,6 +38,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      # Tauri 在 ubuntu 编译需要 GTK/WebKit 系统库(glib-sys 等构建脚本依赖)
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
